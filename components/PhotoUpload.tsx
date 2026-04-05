@@ -25,7 +25,7 @@ export function PhotoUpload({ onImageLoaded }: PhotoUploadProps) {
       const imageData = await fileToImageData(file, 512);
       setFileName(file.name);
       onImageLoaded(imageData);
-    } catch (err) {
+    } catch {
       setError('Failed to load image');
     }
   };
