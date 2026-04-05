@@ -5,7 +5,7 @@ import { thompsonSigmaLoc } from '@/lib/simulator/thompson';
 import type { Emitter, SimulationParams } from '@/lib/simulator/types';
 
 describe('integration: Thompson formula verification', () => {
-  it('measured σ_loc matches Thompson prediction within 25% at N=3000', () => {
+  it('measured σ_loc agrees with Thompson prediction (ratio 0.7–1.4) at N=3000', () => {
     const params: SimulationParams = {
       photonsPerCycle: 3000,
       backgroundPerPixel: 5,

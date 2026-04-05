@@ -24,7 +24,7 @@ describe('renderFrame', () => {
     }
   });
 
-  it('single emitter produces a localized bright spot', () => {
+  it('brightest pixel lands at the emitter center', () => {
     const fieldCenterNm = (64 * 160) / 2;
     const emitters: Emitter[] = [{ x: fieldCenterNm, y: fieldCenterNm }];
     const frame = renderFrame(emitters, { ...baseParams, backgroundPerPixel: 0 }, 0);

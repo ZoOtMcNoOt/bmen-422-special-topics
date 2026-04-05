@@ -11,7 +11,8 @@ export function localizeFrame(frame: Frame, params: SimulationParams): Localizat
   const a = params.pixelSizeNm;
   const sigma = params.psfSigmaNm;
 
-  // Simple threshold: local background estimate + k * sqrt(background)
+  // Simple threshold: b + 4·sqrt(b+1). The `+1` inside the sqrt avoids a
+  // zero threshold when backgroundPerPixel is exactly 0.
   const thresh = params.backgroundPerPixel + 4 * Math.sqrt(params.backgroundPerPixel + 1);
 
   const candidates: { px: number; py: number }[] = [];
