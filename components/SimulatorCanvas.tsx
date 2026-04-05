@@ -13,7 +13,11 @@ export type SimulatorCanvasProps = {
   className?: string;
 };
 
-const colormaps: Record<string, Colormap> = { grayscale, hot, fire };
+const colormaps: Record<'grayscale' | 'hot' | 'fire', Colormap> = {
+  grayscale,
+  hot,
+  fire,
+};
 
 export function SimulatorCanvas({
   pixels,
