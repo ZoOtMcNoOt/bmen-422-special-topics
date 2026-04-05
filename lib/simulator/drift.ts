@@ -28,7 +28,11 @@ export function correctLocalizationDrift(
   binSize: number = 500
 ): Localization[] {
   if (locs.length === 0) return locs;
-  const maxFrame = Math.max(...locs.map((l) => l.frameIndex));
+  // Explicit loop instead of Math.max(...spread): avoids V8's ~125k
+  // argument-count limit when Task 18 runs large acquisitions
+  // (nFrames up to 20000 can produce 200k+ localizations).
+  let maxFrame = 0;
+  for (const l of locs) if (l.frameIndex > maxFrame) maxFrame = l.frameIndex;
   const nBins = Math.ceil((maxFrame + 1) / binSize);
   const binStats: { sumX: number; sumY: number; count: number }[] = [];
   for (let i = 0; i < nBins; i++) binStats.push({ sumX: 0, sumY: 0, count: 0 });
