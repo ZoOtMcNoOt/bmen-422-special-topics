@@ -87,8 +87,62 @@ function generateActin(
 }
 
 function generateFromImage(
-  _input: { kind: 'image'; imageData: ImageData; nEmitters: number },
-  _fieldSizeNm: { width: number; height: number }
+  input: { kind: 'image'; imageData: ImageData; nEmitters: number },
+  fieldSizeNm: { width: number; height: number }
 ): GroundTruth {
-  throw new Error('Image ground truth not yet implemented — see Task 9');
+  const { imageData, nEmitters } = input;
+  const { width, height, data } = imageData;
+
+  // Convert to grayscale intensity in [0, 1]
+  const intensity = new Float32Array(width * height);
+  let maxIntensity = 0;
+  for (let i = 0; i < width * height; i++) {
+    const r = data[i * 4];
+    const g = data[i * 4 + 1];
+    const b = data[i * 4 + 2];
+    const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+    intensity[i] = lum;
+    if (lum > maxIntensity) maxIntensity = lum;
+  }
+  if (maxIntensity === 0) {
+    throw new Error('Image contains no bright pixels to sample from');
+  }
+  // Normalize to peak = 1
+  for (let i = 0; i < intensity.length; i++) intensity[i] /= maxIntensity;
+
+  // Rejection sample emitters
+  const emitters: Emitter[] = [];
+  let attempts = 0;
+  const maxAttempts = nEmitters * 1000;
+  while (emitters.length < nEmitters && attempts < maxAttempts) {
+    attempts++;
+    const px = Math.floor(Math.random() * width);
+    const py = Math.floor(Math.random() * height);
+    const p = intensity[py * width + px];
+    if (Math.random() < p) {
+      // Map pixel (px, py) to field coordinates
+      // Letterbox: fit image into field preserving aspect ratio
+      const imgAspect = width / height;
+      const fieldAspect = fieldSizeNm.width / fieldSizeNm.height;
+      let scale: number;
+      let offsetX = 0;
+      let offsetY = 0;
+      if (imgAspect > fieldAspect) {
+        scale = fieldSizeNm.width / width;
+        offsetY = (fieldSizeNm.height - height * scale) / 2;
+      } else {
+        scale = fieldSizeNm.height / height;
+        offsetX = (fieldSizeNm.width - width * scale) / 2;
+      }
+      const x = offsetX + (px + Math.random()) * scale;
+      const y = offsetY + (py + Math.random()) * scale;
+      emitters.push({ x, y });
+    }
+  }
+
+  return {
+    emitters,
+    fieldSizeNm,
+    label: `Uploaded image (${nEmitters} emitters)`,
+  };
 }
