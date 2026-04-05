@@ -39,7 +39,11 @@ describe('photoswitching', () => {
     const states = initEmitterStates(500);
     const kOn = 0.5;
     const kOff = 0.5;
-    const pBleach = 0.05;
+    // pBleach lowered from 0.05 (plan default) to 0.01 to eliminate
+    // statistical flakiness: at 0.05, P(all 500 bleached in 200 frames) ≈ 4%.
+    // At 0.01, expected survivors ≈ 183, expected bleached ≈ 317, both
+    // bounds are astronomically safe.
+    const pBleach = 0.01;
     for (let f = 0; f < 200; f++) stepPhotoswitching(states, kOn, kOff, pBleach);
     const bleached = states.filter((s) => s.bleached).length;
     expect(bleached).toBeGreaterThan(0);
