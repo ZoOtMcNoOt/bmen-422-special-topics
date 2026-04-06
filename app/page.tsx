@@ -1,65 +1,198 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import { useCallback, useMemo, useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { SimulatorCanvas } from '@/components/SimulatorCanvas';
+import { ControlPanel } from '@/components/ControlPanel';
+import { PresetPicker } from '@/components/PresetPicker';
+import { ThompsonPlot } from '@/components/ThompsonPlot';
+import { generateGroundTruth } from '@/lib/simulator/groundTruth';
+import { runSimulation } from '@/lib/simulator/runSimulation';
+import { renderFrame } from '@/lib/simulator/renderFrame';
+import type {
+  GroundTruthInput,
+  SimulationParams,
+  SimulationResult,
+  Emitter,
+} from '@/lib/simulator/types';
+
+const FIELD_SIZE_NM = { width: 10000, height: 10000 }; // 10 μm × 10 μm
+const FIELD_AREA_UM2 = 100;
+
+const DEFAULT_PARAMS: SimulationParams = {
+  photonsPerCycle: 3000,
+  backgroundPerPixel: 10,
+  dutyCycle: 0.001,
+  nFrames: 2000,
+  driftRateNmPerFrame: 0,
+  correctDrift: true,
+  rigorMode: 'rigorous',
+  pixelSizeNm: 160,
+  psfSigmaNm: 130,
+  fieldSizePx: { width: 64, height: 64 },
+};
+
+type PresetKind = 'two-lines' | 'ring' | 'actin' | 'image';
+
+function buildInput(
+  kind: PresetKind,
+  densityPerUm2: number,
+  uploadedImage: ImageData | null
+): GroundTruthInput | null {
+  const total = Math.min(10000, Math.round(densityPerUm2 * FIELD_AREA_UM2));
+  switch (kind) {
+    case 'two-lines':
+      return {
+        kind: 'two-lines',
+        separationNm: 50,
+        length: 3000,
+        nPerLine: Math.max(2, Math.floor(total / 2)),
+      };
+    case 'ring':
+      return { kind: 'microtubule-ring', diameterNm: 25, nEmitters: total };
+    case 'actin':
+      return {
+        kind: 'actin-periodic',
+        periodNm: 190,
+        lengthNm: 400,
+        nRungs: 10,
+        nPerRung: Math.max(1, Math.floor(total / 10)),
+      };
+    case 'image':
+      if (!uploadedImage) return null;
+      return { kind: 'image', imageData: uploadedImage, nEmitters: total };
+  }
+}
+
+export default function Page() {
+  const [params, setParams] = useState<SimulationParams>(DEFAULT_PARAMS);
+  const [preset, setPreset] = useState<PresetKind>('two-lines');
+  const [densityPerUm2, setDensityPerUm2] = useState(250);
+  const [uploadedImage, setUploadedImage] = useState<ImageData | null>(null);
+  const [result, setResult] = useState<SimulationResult | null>(null);
+  const [progress, setProgress] = useState(0);
+  const [running, setRunning] = useState(false);
+
+  const groundTruth = useMemo(() => {
+    const input = buildInput(preset, densityPerUm2, uploadedImage);
+    if (!input) return null;
+    return generateGroundTruth(input, FIELD_SIZE_NM);
+  }, [preset, densityPerUm2, uploadedImage]);
+
+  // Ground truth preview (each emitter as one pixel)
+  const groundTruthPixels = useMemo(() => {
+    if (!groundTruth) return null;
+    const { width, height } = params.fieldSizePx;
+    const px = new Float32Array(width * height);
+    const a = params.pixelSizeNm;
+    for (const e of groundTruth.emitters) {
+      const x = Math.floor(e.x / a);
+      const y = Math.floor(e.y / a);
+      if (x >= 0 && x < width && y >= 0 && y < height) {
+        px[y * width + x] += 1;
+      }
+    }
+    return px;
+  }, [groundTruth, params.fieldSizePx, params.pixelSizeNm]);
+
+  // Diffraction-limited preview: one frame with ALL emitters ON at high N
+  const diffractionLimitedPixels = useMemo(() => {
+    if (!groundTruth) return null;
+    const allOn: Emitter[] = groundTruth.emitters;
+    const frame = renderFrame(
+      allOn,
+      { ...params, photonsPerCycle: 50, backgroundPerPixel: 0 },
+      0
+    );
+    return frame.pixels;
+  }, [groundTruth, params]);
+
+  // Reconstruction canvas pixels (from last simulation result)
+  const reconstructionPixels = useMemo(() => result?.reconstruction ?? null, [result]);
+  const reconstructionSize = result?.reconstructionSize ?? params.fieldSizePx;
+
+  const onStart = useCallback(async () => {
+    if (!groundTruth || running) return;
+    setRunning(true);
+    setProgress(0);
+    try {
+      const r = await runSimulation(groundTruth, params, {
+        onProgress: (f) => setProgress(f),
+      });
+      setResult(r);
+    } finally {
+      setRunning(false);
+    }
+  }, [groundTruth, params, running]);
+
+  const onReset = useCallback(() => {
+    setResult(null);
+    setProgress(0);
+  }, []);
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+    <main className="min-h-screen p-6 max-w-7xl mx-auto">
+      <header className="mb-6">
+        <h1 className="text-3xl font-bold">STORM: Breaking the Diffraction Limit</h1>
+        <p className="text-slate-400 mt-2">
+          An interactive super-resolution microscopy simulator.
+        </p>
+      </header>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2 flex flex-col gap-6">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <SimulatorCanvas
+              pixels={groundTruthPixels}
+              width={params.fieldSizePx.width}
+              height={params.fieldSizePx.height}
+              title="Ground truth"
+              colormap="grayscale"
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            <SimulatorCanvas
+              pixels={diffractionLimitedPixels}
+              width={params.fieldSizePx.width}
+              height={params.fieldSizePx.height}
+              title="Diffraction-limited"
+              colormap="fire"
+            />
+            <SimulatorCanvas
+              pixels={reconstructionPixels}
+              width={reconstructionSize.width}
+              height={reconstructionSize.height}
+              title="STORM reconstruction"
+              colormap="hot"
+            />
+          </div>
+
+          <PresetPicker
+            value={preset}
+            onValueChange={setPreset}
+            onImageLoaded={setUploadedImage}
+          />
+
+          <div className="flex items-center gap-4">
+            <Button onClick={onStart} disabled={running || !groundTruth}>
+              {running ? `Running… ${Math.round(progress * 100)}%` : '▶ Start Acquisition'}
+            </Button>
+            <Button variant="outline" onClick={onReset} disabled={running}>
+              Reset
+            </Button>
+          </div>
+
+          <ThompsonPlot
+            psfSigmaNm={params.psfSigmaNm}
+            pixelSizeNm={params.pixelSizeNm}
+            backgroundPerPixel={params.backgroundPerPixel}
+            currentPhotons={params.photonsPerCycle}
+            measuredSigmaLocNm={result?.measuredSigmaLocNm ?? null}
+          />
         </div>
-      </main>
-    </div>
+
+        <div>
+          <ControlPanel params={params} onChange={setParams} />
+        </div>
+      </div>
+    </main>
   );
 }
