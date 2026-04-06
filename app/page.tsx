@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { SimulatorCanvas } from '@/components/SimulatorCanvas';
 import { ControlPanel } from '@/components/ControlPanel';
@@ -105,14 +105,17 @@ export default function Page() {
       0
     );
     return frame.pixels;
-  }, [groundTruth, params]);
+  }, [groundTruth, params.fieldSizePx, params.pixelSizeNm, params.psfSigmaNm, params.rigorMode]);
 
   // Reconstruction canvas pixels (from last simulation result)
   const reconstructionPixels = useMemo(() => result?.reconstruction ?? null, [result]);
   const reconstructionSize = result?.reconstructionSize ?? params.fieldSizePx;
 
+  const runningRef = useRef(false);
+
   const onStart = useCallback(async () => {
-    if (!groundTruth || running) return;
+    if (!groundTruth || runningRef.current) return;
+    runningRef.current = true;
     setRunning(true);
     setProgress(0);
     try {
@@ -121,9 +124,10 @@ export default function Page() {
       });
       setResult(r);
     } finally {
+      runningRef.current = false;
       setRunning(false);
     }
-  }, [groundTruth, params, running]);
+  }, [groundTruth, params]);
 
   const onReset = useCallback(() => {
     setResult(null);
