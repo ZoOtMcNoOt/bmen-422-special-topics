@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { motion } from 'motion/react';
 import { drawPixelBufferToCanvas } from '@/lib/rendering/canvas';
 import { fire, grayscale, hot, type Colormap } from '@/lib/rendering/colormap';
 
@@ -35,13 +36,18 @@ export function SimulatorCanvas({
   }, [pixels, width, height, colormap]);
 
   return (
-    <div className={`flex flex-col items-center gap-2 ${className}`}>
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4 }}
+      className={`flex flex-col items-center gap-2 ${className}`}
+    >
       <div className="text-sm font-medium text-slate-300">{title}</div>
       <canvas
         ref={canvasRef}
         className="rounded-md border border-slate-800 bg-slate-900"
         style={{ width: 256, height: 256, imageRendering: 'pixelated' }}
       />
-    </div>
+    </motion.div>
   );
 }
