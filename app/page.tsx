@@ -9,6 +9,7 @@ import { ThompsonPlot } from '@/components/ThompsonPlot';
 import { encodeParamsToQuery } from '@/lib/url-state';
 import { generateGroundTruth } from '@/lib/simulator/groundTruth';
 import { runSimulation } from '@/lib/simulator/runSimulation';
+import { usePreviewWorker } from '@/lib/rendering/usePreviewWorker';
 import type {
   GroundTruthInput,
   SimulationParams,
@@ -78,66 +79,11 @@ export default function Page() {
     return generateGroundTruth(input, FIELD_SIZE_NM);
   }, [preset, densityPerUm2, uploadedImage]);
 
-  // High-resolution previews (20 nm/pixel — 8× finer than camera, fast enough for useMemo)
-  const GT_PIXEL_NM = 20;
-  const gtSize = useMemo(
-    () => ({
-      width: Math.round(FIELD_SIZE_NM.width / GT_PIXEL_NM),
-      height: Math.round(FIELD_SIZE_NM.height / GT_PIXEL_NM),
-    }),
-    []
-  );
-  const groundTruthPixels = useMemo(() => {
-    if (!groundTruth) return null;
-    const { width, height } = gtSize;
-    const px = new Float32Array(width * height);
-    // Splat each emitter as a small Gaussian (sigma ~15nm) so points are visible
-    const sigmaPx = 15 / GT_PIXEL_NM; // 0.75 pixels
-    const radius = Math.ceil(3 * sigmaPx) + 1;
-    const norm = 1 / (2 * Math.PI * sigmaPx * sigmaPx);
-    for (const e of groundTruth.emitters) {
-      const cx = e.x / GT_PIXEL_NM;
-      const cy = e.y / GT_PIXEL_NM;
-      const xMin = Math.max(0, Math.floor(cx - radius));
-      const xMax = Math.min(width - 1, Math.ceil(cx + radius));
-      const yMin = Math.max(0, Math.floor(cy - radius));
-      const yMax = Math.min(height - 1, Math.ceil(cy + radius));
-      for (let py = yMin; py <= yMax; py++) {
-        for (let pxI = xMin; pxI <= xMax; pxI++) {
-          const dx = pxI + 0.5 - cx;
-          const dy = py + 0.5 - cy;
-          px[py * width + pxI] += norm * Math.exp(-(dx * dx + dy * dy) / (2 * sigmaPx * sigmaPx));
-        }
-      }
-    }
-    return px;
-  }, [groundTruth, gtSize]);
-
-  // Diffraction-limited preview: high-res rendering with PSF blur (no Poisson noise)
-  const diffractionLimitedPixels = useMemo(() => {
-    if (!groundTruth) return null;
-    const { width, height } = gtSize;
-    const px = new Float32Array(width * height);
-    const sigmaPx = params.psfSigmaNm / GT_PIXEL_NM; // PSF in high-res pixels
-    const radius = Math.ceil(3 * sigmaPx) + 1;
-    const norm = 1 / (2 * Math.PI * sigmaPx * sigmaPx);
-    for (const e of groundTruth.emitters) {
-      const cx = e.x / GT_PIXEL_NM;
-      const cy = e.y / GT_PIXEL_NM;
-      const xMin = Math.max(0, Math.floor(cx - radius));
-      const xMax = Math.min(width - 1, Math.ceil(cx + radius));
-      const yMin = Math.max(0, Math.floor(cy - radius));
-      const yMax = Math.min(height - 1, Math.ceil(cy + radius));
-      for (let py = yMin; py <= yMax; py++) {
-        for (let pxI = xMin; pxI <= xMax; pxI++) {
-          const dx = pxI + 0.5 - cx;
-          const dy = py + 0.5 - cy;
-          px[py * width + pxI] += norm * Math.exp(-(dx * dx + dy * dy) / (2 * sigmaPx * sigmaPx));
-        }
-      }
-    }
-    return px;
-  }, [groundTruth, gtSize, params.psfSigmaNm]);
+  // High-resolution previews rendered off-thread at 10 nm/pixel (matches reconstruction)
+  const preview = usePreviewWorker(groundTruth, params.psfSigmaNm);
+  const groundTruthPixels = preview.groundTruth;
+  const diffractionLimitedPixels = preview.diffractionLimited;
+  const previewSize = { width: preview.width, height: preview.height };
 
   // Reconstruction canvas pixels (from last simulation result)
   const reconstructionPixels = useMemo(() => result?.reconstruction ?? null, [result]);
@@ -180,15 +126,15 @@ export default function Page() {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <SimulatorCanvas
               pixels={groundTruthPixels}
-              width={gtSize.width}
-              height={gtSize.height}
+              width={previewSize.width}
+              height={previewSize.height}
               title="Ground truth"
               colormap="grayscale"
             />
             <SimulatorCanvas
               pixels={diffractionLimitedPixels}
-              width={gtSize.width}
-              height={gtSize.height}
+              width={previewSize.width}
+              height={previewSize.height}
               title="Diffraction-limited"
               colormap="fire"
             />
