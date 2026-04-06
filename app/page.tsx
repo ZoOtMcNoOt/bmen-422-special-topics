@@ -6,6 +6,7 @@ import { SimulatorCanvas } from '@/components/SimulatorCanvas';
 import { ControlPanel } from '@/components/ControlPanel';
 import { PresetPicker } from '@/components/PresetPicker';
 import { ThompsonPlot } from '@/components/ThompsonPlot';
+import { encodeParamsToQuery } from '@/lib/url-state';
 import { generateGroundTruth } from '@/lib/simulator/groundTruth';
 import { runSimulation } from '@/lib/simulator/runSimulation';
 import { renderFrame } from '@/lib/simulator/renderFrame';
@@ -181,6 +182,17 @@ export default function Page() {
             </Button>
             <Button variant="outline" onClick={onReset} disabled={running}>
               Reset
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                const q = encodeParamsToQuery(params, preset, densityPerUm2);
+                const url = `${window.location.origin}${window.location.pathname}?${q}`;
+                navigator.clipboard.writeText(url);
+                alert('URL copied to clipboard!');
+              }}
+            >
+              Share URL
             </Button>
           </div>
 
