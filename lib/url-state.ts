@@ -18,6 +18,17 @@ export function encodeParamsToQuery(
   return p.toString();
 }
 
+// NaN-aware numeric parse: `||` treats 0 as falsy, which silently
+// corrupts valid zero values for backgroundPerPixel and driftRateNmPerFrame.
+function numOr(raw: string | null, fallback: number): number {
+  const v = parseFloat(raw ?? '');
+  return Number.isNaN(v) ? fallback : v;
+}
+function intOr(raw: string | null, fallback: number): number {
+  const v = parseInt(raw ?? '', 10);
+  return Number.isNaN(v) ? fallback : v;
+}
+
 export function decodeQueryToParams(
   query: string,
   defaults: SimulationParams
@@ -25,17 +36,17 @@ export function decodeQueryToParams(
   const p = new URLSearchParams(query);
   const params: SimulationParams = {
     ...defaults,
-    photonsPerCycle: parseInt(p.get('N') ?? '') || defaults.photonsPerCycle,
-    backgroundPerPixel: parseFloat(p.get('b') ?? '') || defaults.backgroundPerPixel,
-    nFrames: parseInt(p.get('frames') ?? '') || defaults.nFrames,
-    dutyCycle: parseFloat(p.get('duty') ?? '') || defaults.dutyCycle,
-    driftRateNmPerFrame: parseFloat(p.get('drift') ?? '') || defaults.driftRateNmPerFrame,
+    photonsPerCycle: intOr(p.get('N'), defaults.photonsPerCycle),
+    backgroundPerPixel: numOr(p.get('b'), defaults.backgroundPerPixel),
+    nFrames: intOr(p.get('frames'), defaults.nFrames),
+    dutyCycle: numOr(p.get('duty'), defaults.dutyCycle),
+    driftRateNmPerFrame: numOr(p.get('drift'), defaults.driftRateNmPerFrame),
     correctDrift: p.get('correct') !== '0',
     rigorMode: (p.get('rigor') as 'pedagogical' | 'rigorous') ?? defaults.rigorMode,
   };
   return {
     params,
     preset: p.get('preset') ?? 'two-lines',
-    density: parseFloat(p.get('density') ?? '') || 250,
+    density: numOr(p.get('density'), 250),
   };
 }
