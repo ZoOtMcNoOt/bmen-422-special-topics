@@ -9,12 +9,11 @@ import { ThompsonPlot } from '@/components/ThompsonPlot';
 import { encodeParamsToQuery } from '@/lib/url-state';
 import { generateGroundTruth } from '@/lib/simulator/groundTruth';
 import { runSimulation } from '@/lib/simulator/runSimulation';
-import { renderFrame } from '@/lib/simulator/renderFrame';
+import { usePreviewWorker } from '@/lib/rendering/usePreviewWorker';
 import type {
   GroundTruthInput,
   SimulationParams,
   SimulationResult,
-  Emitter,
 } from '@/lib/simulator/types';
 
 const FIELD_SIZE_NM = { width: 10000, height: 10000 }; // 10 μm × 10 μm
@@ -80,33 +79,11 @@ export default function Page() {
     return generateGroundTruth(input, FIELD_SIZE_NM);
   }, [preset, densityPerUm2, uploadedImage]);
 
-  // Ground truth preview (each emitter as one pixel)
-  const groundTruthPixels = useMemo(() => {
-    if (!groundTruth) return null;
-    const { width, height } = params.fieldSizePx;
-    const px = new Float32Array(width * height);
-    const a = params.pixelSizeNm;
-    for (const e of groundTruth.emitters) {
-      const x = Math.floor(e.x / a);
-      const y = Math.floor(e.y / a);
-      if (x >= 0 && x < width && y >= 0 && y < height) {
-        px[y * width + x] += 1;
-      }
-    }
-    return px;
-  }, [groundTruth, params.fieldSizePx, params.pixelSizeNm]);
-
-  // Diffraction-limited preview: one frame with ALL emitters ON at high N
-  const diffractionLimitedPixels = useMemo(() => {
-    if (!groundTruth) return null;
-    const allOn: Emitter[] = groundTruth.emitters;
-    const frame = renderFrame(
-      allOn,
-      { ...params, photonsPerCycle: 50, backgroundPerPixel: 0 },
-      0
-    );
-    return frame.pixels;
-  }, [groundTruth, params.fieldSizePx, params.pixelSizeNm, params.psfSigmaNm, params.rigorMode]);
+  // High-resolution previews rendered off-thread at 10 nm/pixel (matches reconstruction)
+  const preview = usePreviewWorker(groundTruth, params.psfSigmaNm);
+  const groundTruthPixels = preview.groundTruth;
+  const diffractionLimitedPixels = preview.diffractionLimited;
+  const previewSize = { width: preview.width, height: preview.height };
 
   // Reconstruction canvas pixels (from last simulation result)
   const reconstructionPixels = useMemo(() => result?.reconstruction ?? null, [result]);
@@ -149,15 +126,15 @@ export default function Page() {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <SimulatorCanvas
               pixels={groundTruthPixels}
-              width={params.fieldSizePx.width}
-              height={params.fieldSizePx.height}
+              width={previewSize.width}
+              height={previewSize.height}
               title="Ground truth"
               colormap="grayscale"
             />
             <SimulatorCanvas
               pixels={diffractionLimitedPixels}
-              width={params.fieldSizePx.width}
-              height={params.fieldSizePx.height}
+              width={previewSize.width}
+              height={previewSize.height}
               title="Diffraction-limited"
               colormap="fire"
             />

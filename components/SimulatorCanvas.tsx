@@ -46,7 +46,7 @@ export function SimulatorCanvas({
       <canvas
         ref={canvasRef}
         className="rounded-md border border-slate-800 bg-slate-900"
-        style={{ width: 256, height: 256, imageRendering: 'pixelated' }}
+        style={{ width: 256, height: 256 }}
       />
     </motion.div>
   );
