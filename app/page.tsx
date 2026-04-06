@@ -9,12 +9,10 @@ import { ThompsonPlot } from '@/components/ThompsonPlot';
 import { encodeParamsToQuery } from '@/lib/url-state';
 import { generateGroundTruth } from '@/lib/simulator/groundTruth';
 import { runSimulation } from '@/lib/simulator/runSimulation';
-import { renderFrame } from '@/lib/simulator/renderFrame';
 import type {
   GroundTruthInput,
   SimulationParams,
   SimulationResult,
-  Emitter,
 } from '@/lib/simulator/types';
 
 const FIELD_SIZE_NM = { width: 10000, height: 10000 }; // 10 μm × 10 μm
@@ -80,33 +78,66 @@ export default function Page() {
     return generateGroundTruth(input, FIELD_SIZE_NM);
   }, [preset, densityPerUm2, uploadedImage]);
 
-  // Ground truth preview (each emitter as one pixel)
+  // High-resolution previews (20 nm/pixel — 8× finer than camera, fast enough for useMemo)
+  const GT_PIXEL_NM = 20;
+  const gtSize = useMemo(
+    () => ({
+      width: Math.round(FIELD_SIZE_NM.width / GT_PIXEL_NM),
+      height: Math.round(FIELD_SIZE_NM.height / GT_PIXEL_NM),
+    }),
+    []
+  );
   const groundTruthPixels = useMemo(() => {
     if (!groundTruth) return null;
-    const { width, height } = params.fieldSizePx;
+    const { width, height } = gtSize;
     const px = new Float32Array(width * height);
-    const a = params.pixelSizeNm;
+    // Splat each emitter as a small Gaussian (sigma ~15nm) so points are visible
+    const sigmaPx = 15 / GT_PIXEL_NM; // 0.75 pixels
+    const radius = Math.ceil(3 * sigmaPx) + 1;
+    const norm = 1 / (2 * Math.PI * sigmaPx * sigmaPx);
     for (const e of groundTruth.emitters) {
-      const x = Math.floor(e.x / a);
-      const y = Math.floor(e.y / a);
-      if (x >= 0 && x < width && y >= 0 && y < height) {
-        px[y * width + x] += 1;
+      const cx = e.x / GT_PIXEL_NM;
+      const cy = e.y / GT_PIXEL_NM;
+      const xMin = Math.max(0, Math.floor(cx - radius));
+      const xMax = Math.min(width - 1, Math.ceil(cx + radius));
+      const yMin = Math.max(0, Math.floor(cy - radius));
+      const yMax = Math.min(height - 1, Math.ceil(cy + radius));
+      for (let py = yMin; py <= yMax; py++) {
+        for (let pxI = xMin; pxI <= xMax; pxI++) {
+          const dx = pxI + 0.5 - cx;
+          const dy = py + 0.5 - cy;
+          px[py * width + pxI] += norm * Math.exp(-(dx * dx + dy * dy) / (2 * sigmaPx * sigmaPx));
+        }
       }
     }
     return px;
-  }, [groundTruth, params.fieldSizePx, params.pixelSizeNm]);
+  }, [groundTruth, gtSize]);
 
-  // Diffraction-limited preview: one frame with ALL emitters ON at high N
+  // Diffraction-limited preview: high-res rendering with PSF blur (no Poisson noise)
   const diffractionLimitedPixels = useMemo(() => {
     if (!groundTruth) return null;
-    const allOn: Emitter[] = groundTruth.emitters;
-    const frame = renderFrame(
-      allOn,
-      { ...params, photonsPerCycle: 50, backgroundPerPixel: 0 },
-      0
-    );
-    return frame.pixels;
-  }, [groundTruth, params.fieldSizePx, params.pixelSizeNm, params.psfSigmaNm, params.rigorMode]);
+    const { width, height } = gtSize;
+    const px = new Float32Array(width * height);
+    const sigmaPx = params.psfSigmaNm / GT_PIXEL_NM; // PSF in high-res pixels
+    const radius = Math.ceil(3 * sigmaPx) + 1;
+    const norm = 1 / (2 * Math.PI * sigmaPx * sigmaPx);
+    for (const e of groundTruth.emitters) {
+      const cx = e.x / GT_PIXEL_NM;
+      const cy = e.y / GT_PIXEL_NM;
+      const xMin = Math.max(0, Math.floor(cx - radius));
+      const xMax = Math.min(width - 1, Math.ceil(cx + radius));
+      const yMin = Math.max(0, Math.floor(cy - radius));
+      const yMax = Math.min(height - 1, Math.ceil(cy + radius));
+      for (let py = yMin; py <= yMax; py++) {
+        for (let pxI = xMin; pxI <= xMax; pxI++) {
+          const dx = pxI + 0.5 - cx;
+          const dy = py + 0.5 - cy;
+          px[py * width + pxI] += norm * Math.exp(-(dx * dx + dy * dy) / (2 * sigmaPx * sigmaPx));
+        }
+      }
+    }
+    return px;
+  }, [groundTruth, gtSize, params.psfSigmaNm]);
 
   // Reconstruction canvas pixels (from last simulation result)
   const reconstructionPixels = useMemo(() => result?.reconstruction ?? null, [result]);
@@ -149,15 +180,15 @@ export default function Page() {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <SimulatorCanvas
               pixels={groundTruthPixels}
-              width={params.fieldSizePx.width}
-              height={params.fieldSizePx.height}
+              width={gtSize.width}
+              height={gtSize.height}
               title="Ground truth"
               colormap="grayscale"
             />
             <SimulatorCanvas
               pixels={diffractionLimitedPixels}
-              width={params.fieldSizePx.width}
-              height={params.fieldSizePx.height}
+              width={gtSize.width}
+              height={gtSize.height}
               title="Diffraction-limited"
               colormap="fire"
             />
