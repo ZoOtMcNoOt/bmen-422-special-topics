@@ -22,17 +22,38 @@ function computeMedianSigmaLoc(locs: Localization[]): number {
     : sorted[mid];
 }
 
+export type LiveFrameUpdate = {
+  // Snapshot of the camera frame just rendered. Owned by the caller after
+  // this callback returns — runSimulation will not mutate it.
+  framePixels: Float32Array;
+  // Cumulative sum of every frame rendered so far (W × H photons). A *copy*
+  // of the running accumulator, also safe for the caller to retain.
+  cumulativePixels: Float32Array;
+  width: number;
+  height: number;
+  frameIndex: number; // 0-based; equals nFrames-1 on the final update
+  totalFrames: number;
+  nLocalizationsSoFar: number;
+};
+
 export type RunOptions = {
   onProgress?: (fraction: number) => void;
+  // Called periodically (every ~50 frames + once at the end) so the UI
+  // can render the live camera view without blocking the simulation loop.
+  onFrame?: (update: LiveFrameUpdate) => void;
   signal?: AbortSignal;
 };
+
+// How often to surface live frames to the UI. Matches the existing event-loop
+// yield cadence so we don't add extra animation-frame work.
+const LIVE_UPDATE_STRIDE = 50;
 
 export async function runSimulation(
   groundTruth: GroundTruth,
   params: SimulationParams,
   options: RunOptions = {}
 ): Promise<SimulationResult> {
-  const { onProgress, signal } = options;
+  const { onProgress, onFrame, signal } = options;
   const states = initEmitterStates(groundTruth.emitters.length);
   const { kOn, kOff } = ratesFromDutyCycle(params.dutyCycle, 0.4);
   const pBleach = 0;
@@ -42,8 +63,18 @@ export async function runSimulation(
   // efficiency (localizations / true blink-frame events).
   let totalOnFrameEvents = 0;
 
+  const W = params.fieldSizePx.width;
+  const H = params.fieldSizePx.height;
+  // Running sum of every rendered frame — the "what a long-exposure camera
+  // would have seen" projection. A single allocation, accumulated in place.
+  const cumulative = new Float32Array(W * H);
+
   // Warm up so the duty cycle is near steady state from frame 0
   for (let i = 0; i < 20; i++) stepPhotoswitching(states, kOn, kOff, pBleach);
+
+  // Hold a reference to the most-recently-rendered frame so we can flush a
+  // final live update after the loop without re-rendering.
+  let lastFramePixels: Float32Array | null = null;
 
   for (let f = 0; f < params.nFrames; f++) {
     if (signal?.aborted) break;
@@ -58,14 +89,44 @@ export async function runSimulation(
     }
     totalOnFrameEvents += active.length;
     const frame = renderFrame(active, params, f);
+    lastFramePixels = frame.pixels;
+    // Accumulate into the cumulative projection.
+    for (let i = 0; i < cumulative.length; i++) cumulative[i] += frame.pixels[i];
+
     const locs = localizeFrame(frame, params);
     for (const l of locs) allLocs.push(l);
 
-    if (f % 50 === 0) {
+    if (f % LIVE_UPDATE_STRIDE === 0) {
       onProgress?.(f / params.nFrames);
-      // Yield to event loop
+      // Pass copies of the buffers we keep mutating so the UI can hold on
+      // to them without seeing torn updates.
+      onFrame?.({
+        framePixels: frame.pixels, // fresh allocation per frame, safe to share
+        cumulativePixels: cumulative.slice(),
+        width: W,
+        height: H,
+        frameIndex: f,
+        totalFrames: params.nFrames,
+        nLocalizationsSoFar: allLocs.length,
+      });
+      // Yield to event loop so React can repaint
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
+  }
+
+  // Final live-update flush — the loop's last 50-frame window may not have
+  // landed on the stride boundary, so push one more snapshot so the UI ends
+  // showing the very last frame and the complete cumulative image.
+  if (lastFramePixels !== null) {
+    onFrame?.({
+      framePixels: lastFramePixels,
+      cumulativePixels: cumulative.slice(),
+      width: W,
+      height: H,
+      frameIndex: params.nFrames - 1,
+      totalFrames: params.nFrames,
+      nLocalizationsSoFar: allLocs.length,
+    });
   }
 
   const finalLocs = params.correctDrift ? correctLocalizationDrift(allLocs, 100) : allLocs;
@@ -106,6 +167,8 @@ export async function runSimulation(
     localizations: finalLocs,
     reconstruction: recon.pixels,
     reconstructionSize: { width: recon.width, height: recon.height },
+    summedFramesPixels: cumulative,
+    summedFramesSize: { width: W, height: H },
     measuredSigmaLocNm: measuredSigmaLoc,
     predictedSigmaLocNm: predictedSigmaLoc,
     empiricalPrecisionNm: empirical.medianNm,

@@ -61,6 +61,13 @@ export type SimulationResult = {
   localizations: Localization[];
   reconstruction: Float32Array;
   reconstructionSize: { width: number; height: number };
+  // Sum projection of every rendered camera frame — what a long-exposure
+  // (non-switching) acquisition of the same sample would look like. Same
+  // shape as the camera (W × H, Float32 photons). Useful as a sanity check:
+  // dividing the integrated PSFs from this image should reproduce the
+  // ground-truth emitter map smeared by the diffraction limit.
+  summedFramesPixels: Float32Array;
+  summedFramesSize: { width: number; height: number };
   // Median of the per-localization Thompson prediction (σ computed from
   // each loc's apparent photon count). Labelled "measured" in the UI for
   // historical reasons; this is really an inverse-variance proxy, NOT a

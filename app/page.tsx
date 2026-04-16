@@ -6,6 +6,7 @@ import { SimulatorCanvas } from '@/components/SimulatorCanvas';
 import { ControlPanel } from '@/components/ControlPanel';
 import { PresetPicker } from '@/components/PresetPicker';
 import { ThompsonPlot } from '@/components/ThompsonPlot';
+import { CameraView } from '@/components/CameraView';
 import { decodeQueryToParams, encodeParamsToQuery } from '@/lib/url-state';
 import { generateGroundTruth } from '@/lib/simulator/groundTruth';
 import { runSimulation } from '@/lib/simulator/runSimulation';
@@ -15,6 +16,16 @@ import type {
   SimulationParams,
   SimulationResult,
 } from '@/lib/simulator/types';
+
+type LiveCameraState = {
+  framePixels: Float32Array;
+  cumulativePixels: Float32Array;
+  width: number;
+  height: number;
+  frameIndex: number;
+  totalFrames: number;
+  nLocalizationsSoFar: number;
+};
 
 const FIELD_SIZE_NM = { width: 10000, height: 10000 }; // 10 μm × 10 μm
 const FIELD_AREA_UM2 = 100;
@@ -93,6 +104,7 @@ export default function Page() {
   const [result, setResult] = useState<SimulationResult | null>(null);
   const [progress, setProgress] = useState(0);
   const [running, setRunning] = useState(false);
+  const [liveCamera, setLiveCamera] = useState<LiveCameraState | null>(null);
 
   // Restore state from the URL on mount so shared links actually round-trip.
   // Runs once; we intentionally don't sync back to the URL on every state
@@ -130,9 +142,12 @@ export default function Page() {
     runningRef.current = true;
     setRunning(true);
     setProgress(0);
+    setLiveCamera(null);
+    setResult(null);
     try {
       const r = await runSimulation(groundTruth, params, {
         onProgress: (f) => setProgress(f),
+        onFrame: (u) => setLiveCamera(u),
       });
       setResult(r);
     } finally {
@@ -143,6 +158,7 @@ export default function Page() {
 
   const onReset = useCallback(() => {
     setResult(null);
+    setLiveCamera(null);
     setProgress(0);
   }, []);
 
@@ -180,6 +196,17 @@ export default function Page() {
               colormap="hot"
             />
           </div>
+
+          <CameraView
+            framePixels={liveCamera?.framePixels ?? null}
+            cumulativePixels={liveCamera?.cumulativePixels ?? null}
+            width={liveCamera?.width ?? params.fieldSizePx.width}
+            height={liveCamera?.height ?? params.fieldSizePx.height}
+            frameIndex={liveCamera?.frameIndex ?? 0}
+            totalFrames={liveCamera?.totalFrames ?? 0}
+            nLocalizationsSoFar={liveCamera?.nLocalizationsSoFar ?? 0}
+            isRunning={running}
+          />
 
           <PresetPicker
             value={preset}
