@@ -61,6 +61,20 @@ export type SimulationResult = {
   localizations: Localization[];
   reconstruction: Float32Array;
   reconstructionSize: { width: number; height: number };
+  // Median of the per-localization Thompson prediction (σ computed from
+  // each loc's apparent photon count). Labelled "measured" in the UI for
+  // historical reasons; this is really an inverse-variance proxy, NOT a
+  // direct ground-truth measurement.
   measuredSigmaLocNm: number;
+  // Thompson prediction evaluated at the currently-selected photonsPerCycle.
   predictedSigmaLocNm: number;
+  // Direct ground-truth measurement: median Euclidean distance from each
+  // localization to its nearest true emitter. Captures crowding artefacts
+  // the Thompson formula is blind to.
+  empiricalPrecisionNm: number;
+  empiricalPrecisionP90Nm: number;
+  // Localizations divided by total ON-emitter-frame events. A value < 1
+  // means the local-max detector merged simultaneously-on neighbouring
+  // molecules into a single detection.
+  detectionEfficiency: number;
 };

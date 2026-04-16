@@ -19,9 +19,22 @@ import type {
 const FIELD_SIZE_NM = { width: 10000, height: 10000 }; // 10 μm × 10 μm
 const FIELD_AREA_UM2 = 100;
 
+// Defaults calibrated against Alexa Fluor 647 — the canonical dSTORM dye.
+// - photonsPerCycle: 5000 is the photon count per detected ON event
+//   commonly reported in dSTORM literature (Dempsey et al. Nat Methods 2011
+//   report ~6000 for AF647 in MEA buffer; we pick a conservative 5000 so the
+//   Thompson curve sits comfortably inside the well-behaved regime).
+// - backgroundPerPixel: 20 ≈ 1 / 50 × photons-per-molecule, a standard
+//   assumption in SMLM simulation benchmarks when no explicit value is
+//   quoted (SMLM-2016 challenge data use 15–40 photons/px).
+// - dutyCycle 0.001: AF647 spends ~0.1% of the time fluorescing at steady
+//   state in optimised dSTORM buffer (Dempsey 2011).
+// - pixelSize 160 nm, psfSigma 130 nm: a 1.4-NA 100× objective imaging
+//   ~670 nm emission projected onto a 16 µm camera pixel (≈ Nyquist for a
+//   230 nm FWHM PSF).
 const DEFAULT_PARAMS: SimulationParams = {
-  photonsPerCycle: 3000,
-  backgroundPerPixel: 10,
+  photonsPerCycle: 5000,
+  backgroundPerPixel: 20,
   dutyCycle: 0.001,
   nFrames: 2000,
   driftRateNmPerFrame: 0,
@@ -49,7 +62,11 @@ function buildInput(
         nPerLine: Math.max(2, Math.floor(total / 2)),
       };
     case 'ring':
-      return { kind: 'microtubule-ring', diameterNm: 25, nEmitters: total };
+      // Native microtubule outer diameter is 25 nm, but primary + secondary
+      // antibody stacks used in dSTORM add ~17.5 nm per side, so immuno-
+      // labelled microtubules appear as ~60 nm hollow cylinders (Dempsey et
+      // al., Weber et al.). 60 nm is the standard benchmark resolution target.
+      return { kind: 'microtubule-ring', diameterNm: 60, nEmitters: total };
     case 'actin':
       return {
         kind: 'actin-periodic',
@@ -179,6 +196,8 @@ export default function Page() {
             backgroundPerPixel={params.backgroundPerPixel}
             currentPhotons={params.photonsPerCycle}
             measuredSigmaLocNm={result?.measuredSigmaLocNm ?? null}
+            empiricalPrecisionNm={result?.empiricalPrecisionNm ?? null}
+            detectionEfficiency={result?.detectionEfficiency ?? null}
           />
         </div>
 

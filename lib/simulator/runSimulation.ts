@@ -11,6 +11,7 @@ import { localizeFrame } from './localization';
 import { computeDriftAtFrame, applyDriftToEmitter, correctLocalizationDrift } from './drift';
 import { reconstructImage } from './reconstruction';
 import { thompsonSigmaLoc } from './thompson';
+import { computeEmpiricalPrecision, computeDetectionEfficiency } from './analysis';
 
 function computeMedianSigmaLoc(locs: Localization[]): number {
   if (locs.length === 0) return 0;
@@ -37,6 +38,9 @@ export async function runSimulation(
   const pBleach = 0;
 
   const allLocs: Localization[] = [];
+  // Track total ON-emitter-frame events so we can report detection
+  // efficiency (localizations / true blink-frame events).
+  let totalOnFrameEvents = 0;
 
   // Warm up so the duty cycle is near steady state from frame 0
   for (let i = 0; i < 20; i++) stepPhotoswitching(states, kOn, kOff, pBleach);
@@ -52,6 +56,7 @@ export async function runSimulation(
         active.push(applyDriftToEmitter(groundTruth.emitters[i], drift));
       }
     }
+    totalOnFrameEvents += active.length;
     const frame = renderFrame(active, params, f);
     const locs = localizeFrame(frame, params);
     for (const l of locs) allLocs.push(l);
@@ -88,6 +93,12 @@ export async function runSimulation(
     params.backgroundPerPixel
   );
 
+  const empirical = computeEmpiricalPrecision(finalLocs, groundTruth);
+  const detectionEfficiency = computeDetectionEfficiency(
+    finalLocs.length,
+    totalOnFrameEvents
+  );
+
   onProgress?.(1);
 
   return {
@@ -97,5 +108,8 @@ export async function runSimulation(
     reconstructionSize: { width: recon.width, height: recon.height },
     measuredSigmaLocNm: measuredSigmaLoc,
     predictedSigmaLocNm: predictedSigmaLoc,
+    empiricalPrecisionNm: empirical.medianNm,
+    empiricalPrecisionP90Nm: empirical.p90Nm,
+    detectionEfficiency,
   };
 }

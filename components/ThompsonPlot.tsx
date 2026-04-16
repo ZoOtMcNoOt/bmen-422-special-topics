@@ -30,6 +30,10 @@ export type ThompsonPlotProps = {
   backgroundPerPixel: number;
   currentPhotons: number;
   measuredSigmaLocNm: number | null;
+  // Optional ground-truth-referenced metrics. When provided, a third point
+  // and a stats column for each are rendered.
+  empiricalPrecisionNm?: number | null;
+  detectionEfficiency?: number | null;
 };
 
 const N_MIN = 100;
@@ -42,6 +46,8 @@ export function ThompsonPlot({
   backgroundPerPixel,
   currentPhotons,
   measuredSigmaLocNm,
+  empiricalPrecisionNm = null,
+  detectionEfficiency = null,
 }: ThompsonPlotProps) {
   const divRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<echarts.EChartsType | null>(null);
@@ -90,7 +96,16 @@ export function ThompsonPlot({
     if (!chart) return;
 
     const hasMeasured = measuredSigmaLocNm !== null && measuredSigmaLocNm > 0;
-    const ratio = hasMeasured ? (measuredSigmaLocNm as number) / currentPred : null;
+    const apparentRatio = hasMeasured
+      ? (measuredSigmaLocNm as number) / currentPred
+      : null;
+    const hasEmpirical =
+      empiricalPrecisionNm !== null &&
+      empiricalPrecisionNm !== undefined &&
+      empiricalPrecisionNm > 0;
+    const empiricalRatio = hasEmpirical
+      ? (empiricalPrecisionNm as number) / currentPred
+      : null;
 
     chart.setOption({
       // `notMerge` so the Measured series disappears cleanly on reset rather
@@ -223,7 +238,9 @@ export function ThompsonPlot({
         ...(hasMeasured
           ? [
               {
-                name: `Measured${ratio != null ? `  (${ratio.toFixed(2)}× predicted)` : ''}`,
+                name: `Apparent σ (per-loc Thompson)${
+                  apparentRatio != null ? `  ·  ${apparentRatio.toFixed(2)}×` : ''
+                }`,
                 type: 'scatter' as const,
                 symbol: 'diamond',
                 symbolSize: 13,
@@ -237,44 +254,97 @@ export function ThompsonPlot({
               },
             ]
           : []),
+        ...(hasEmpirical
+          ? [
+              {
+                name: `Empirical (vs. ground truth)${
+                  empiricalRatio != null ? `  ·  ${empiricalRatio.toFixed(2)}×` : ''
+                }`,
+                type: 'scatter' as const,
+                symbol: 'triangle',
+                symbolSize: 13,
+                data: [[currentPhotons, empiricalPrecisionNm as number]],
+                itemStyle: {
+                  color: '#a78bfa',
+                  borderColor: '#ede9fe',
+                  borderWidth: 1.5,
+                },
+                z: 7,
+              },
+            ]
+          : []),
       ],
     }, { notMerge: true });
-  }, [curves, currentPhotons, currentPred, measuredSigmaLocNm]);
-
-  const ratio =
-    measuredSigmaLocNm !== null && measuredSigmaLocNm > 0
-      ? measuredSigmaLocNm / currentPred
-      : null;
+  }, [
+    curves,
+    currentPhotons,
+    currentPred,
+    measuredSigmaLocNm,
+    empiricalPrecisionNm,
+  ]);
 
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-slate-800 bg-slate-900/50 p-4">
       <div className="flex items-baseline justify-between gap-4">
-        <div className="text-sm font-medium text-slate-300">Thompson precision</div>
+        <div className="text-sm font-medium text-slate-300">Localization precision</div>
         <div className="text-[10px] text-slate-500 tabular-nums">
           σ_psf={psfSigmaNm}nm · a={pixelSizeNm}nm · b={backgroundPerPixel}
         </div>
       </div>
       <div ref={divRef} className="h-[280px] w-full" />
-      <div className="grid grid-cols-3 gap-3 border-t border-slate-800 pt-3 text-xs">
-        <div className="flex flex-col">
-          <span className="text-slate-500">Predicted</span>
-          <span className="font-mono text-sm text-orange-400">
-            {currentPred.toFixed(2)} nm
-          </span>
-        </div>
-        <div className="flex flex-col">
-          <span className="text-slate-500">Measured</span>
-          <span className="font-mono text-sm text-cyan-400">
-            {measuredSigmaLocNm !== null ? `${measuredSigmaLocNm.toFixed(2)} nm` : '—'}
-          </span>
-        </div>
-        <div className="flex flex-col">
-          <span className="text-slate-500">Ratio (m/p)</span>
-          <span className="font-mono text-sm text-slate-200">
-            {ratio !== null ? `${ratio.toFixed(2)}×` : '—'}
-          </span>
-        </div>
+      <div className="grid grid-cols-4 gap-3 border-t border-slate-800 pt-3 text-xs">
+        <Stat
+          label="Thompson"
+          help="σ_loc(N) predicted by the Thompson 2002 formula"
+          value={`${currentPred.toFixed(2)} nm`}
+          valueClass="text-orange-400"
+        />
+        <Stat
+          label="Apparent σ"
+          help="median of per-loc Thompson(N̂) — biased by crowding"
+          value={measuredSigmaLocNm !== null ? `${measuredSigmaLocNm.toFixed(2)} nm` : '—'}
+          valueClass="text-cyan-400"
+        />
+        <Stat
+          label="Empirical"
+          help="median distance to the nearest true emitter (what the simulator actually got)"
+          value={
+            empiricalPrecisionNm !== null && empiricalPrecisionNm !== undefined
+              ? `${empiricalPrecisionNm.toFixed(2)} nm`
+              : '—'
+          }
+          valueClass="text-violet-400"
+        />
+        <Stat
+          label="Detection η"
+          help="localizations per ON-emitter-frame event (1.0 = every blink detected)"
+          value={
+            detectionEfficiency !== null && detectionEfficiency !== undefined
+              ? `${(detectionEfficiency * 100).toFixed(0)}%`
+              : '—'
+          }
+          valueClass="text-slate-200"
+        />
       </div>
+    </div>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  help,
+  valueClass,
+}: {
+  label: string;
+  value: string;
+  help: string;
+  valueClass: string;
+}) {
+  return (
+    <div className="flex flex-col" title={help}>
+      <span className="text-slate-500">{label}</span>
+      <span className={`font-mono text-sm ${valueClass}`}>{value}</span>
     </div>
   );
 }
