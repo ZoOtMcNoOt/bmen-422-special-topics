@@ -22,7 +22,8 @@ export function PresetPicker({ value, onValueChange, onImageLoaded }: PresetPick
         Two parallel emitter lines at 50 nm separation — the classic resolution test.
       </TabsContent>
       <TabsContent value="ring" className="text-sm text-slate-400 p-4">
-        A 25 nm hollow ring mimicking a microtubule cross-section.
+        A 60 nm hollow ring — the apparent diameter of an immunolabelled
+        microtubule cross-section (native 25 nm + antibody stack).
       </TabsContent>
       <TabsContent value="actin" className="text-sm text-slate-400 p-4">
         Periodic actin-spectrin scaffold with ~190 nm spacing — recreating Xu et al. 2013.

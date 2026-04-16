@@ -1,12 +1,12 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { SimulatorCanvas } from '@/components/SimulatorCanvas';
 import { ControlPanel } from '@/components/ControlPanel';
 import { PresetPicker } from '@/components/PresetPicker';
 import { ThompsonPlot } from '@/components/ThompsonPlot';
-import { encodeParamsToQuery } from '@/lib/url-state';
+import { decodeQueryToParams, encodeParamsToQuery } from '@/lib/url-state';
 import { generateGroundTruth } from '@/lib/simulator/groundTruth';
 import { runSimulation } from '@/lib/simulator/runSimulation';
 import { usePreviewWorker } from '@/lib/rendering/usePreviewWorker';
@@ -81,6 +81,10 @@ function buildInput(
   }
 }
 
+const VALID_PRESETS: readonly PresetKind[] = ['two-lines', 'ring', 'actin', 'image'];
+const isPresetKind = (v: string): v is PresetKind =>
+  (VALID_PRESETS as readonly string[]).includes(v);
+
 export default function Page() {
   const [params, setParams] = useState<SimulationParams>(DEFAULT_PARAMS);
   const [preset, setPreset] = useState<PresetKind>('two-lines');
@@ -89,6 +93,19 @@ export default function Page() {
   const [result, setResult] = useState<SimulationResult | null>(null);
   const [progress, setProgress] = useState(0);
   const [running, setRunning] = useState(false);
+
+  // Restore state from the URL on mount so shared links actually round-trip.
+  // Runs once; we intentionally don't sync back to the URL on every state
+  // change — the user triggers that explicitly with the "Share URL" button.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.location.search) return;
+    const decoded = decodeQueryToParams(window.location.search, DEFAULT_PARAMS);
+    setParams(decoded.params);
+    if (isPresetKind(decoded.preset)) setPreset(decoded.preset);
+    if (Number.isFinite(decoded.density) && decoded.density > 0) {
+      setDensityPerUm2(decoded.density);
+    }
+  }, []);
 
   const groundTruth = useMemo(() => {
     const input = buildInput(preset, densityPerUm2, uploadedImage);
