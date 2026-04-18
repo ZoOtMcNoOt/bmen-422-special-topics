@@ -23,15 +23,14 @@ function computeMedianSigmaLoc(locs: Localization[]): number {
 }
 
 export type LiveFrameUpdate = {
-  // Snapshot of the camera frame just rendered. Owned by the caller after
-  // this callback returns — runSimulation will not mutate it.
   framePixels: Float32Array;
-  // Cumulative sum of every frame rendered so far (W × H photons). A *copy*
-  // of the running accumulator, also safe for the caller to retain.
   cumulativePixels: Float32Array;
+  // Snapshot of ALL localizations accumulated from frame 0 up to frameIndex.
+  // Safe to retain — runSimulation copies the array on each update.
+  localizations: Localization[];
   width: number;
   height: number;
-  frameIndex: number; // 0-based; equals nFrames-1 on the final update
+  frameIndex: number;
   totalFrames: number;
   nLocalizationsSoFar: number;
 };
@@ -101,8 +100,9 @@ export async function runSimulation(
       // Pass copies of the buffers we keep mutating so the UI can hold on
       // to them without seeing torn updates.
       onFrame?.({
-        framePixels: frame.pixels, // fresh allocation per frame, safe to share
+        framePixels: frame.pixels,
         cumulativePixels: cumulative.slice(),
+        localizations: allLocs.slice(),
         width: W,
         height: H,
         frameIndex: f,
@@ -121,6 +121,7 @@ export async function runSimulation(
     onFrame?.({
       framePixels: lastFramePixels,
       cumulativePixels: cumulative.slice(),
+      localizations: allLocs.slice(),
       width: W,
       height: H,
       frameIndex: params.nFrames - 1,

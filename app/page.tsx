@@ -6,7 +6,6 @@ import { SimulatorCanvas } from '@/components/SimulatorCanvas';
 import { ControlPanel } from '@/components/ControlPanel';
 import { PresetPicker } from '@/components/PresetPicker';
 import { ThompsonPlot } from '@/components/ThompsonPlot';
-import { CameraView } from '@/components/CameraView';
 import { ProgressiveReconstruction } from '@/components/ProgressiveReconstruction';
 import { decodeQueryToParams, encodeParamsToQuery } from '@/lib/url-state';
 import { generateGroundTruth } from '@/lib/simulator/groundTruth';
@@ -14,36 +13,14 @@ import { runSimulation } from '@/lib/simulator/runSimulation';
 import { usePreviewWorker } from '@/lib/rendering/usePreviewWorker';
 import type {
   GroundTruthInput,
+  Localization,
   SimulationParams,
   SimulationResult,
 } from '@/lib/simulator/types';
 
-type LiveCameraState = {
-  framePixels: Float32Array;
-  cumulativePixels: Float32Array;
-  width: number;
-  height: number;
-  frameIndex: number;
-  totalFrames: number;
-  nLocalizationsSoFar: number;
-};
-
-const FIELD_SIZE_NM = { width: 10000, height: 10000 }; // 10 μm × 10 μm
+const FIELD_SIZE_NM = { width: 10000, height: 10000 };
 const FIELD_AREA_UM2 = 100;
 
-// Defaults calibrated against Alexa Fluor 647 — the canonical dSTORM dye.
-// - photonsPerCycle: 5000 is the photon count per detected ON event
-//   commonly reported in dSTORM literature (Dempsey et al. Nat Methods 2011
-//   report ~6000 for AF647 in MEA buffer; we pick a conservative 5000 so the
-//   Thompson curve sits comfortably inside the well-behaved regime).
-// - backgroundPerPixel: 20 ≈ 1 / 50 × photons-per-molecule, a standard
-//   assumption in SMLM simulation benchmarks when no explicit value is
-//   quoted (SMLM-2016 challenge data use 15–40 photons/px).
-// - dutyCycle 0.001: AF647 spends ~0.1% of the time fluorescing at steady
-//   state in optimised dSTORM buffer (Dempsey 2011).
-// - pixelSize 160 nm, psfSigma 130 nm: a 1.4-NA 100× objective imaging
-//   ~670 nm emission projected onto a 16 µm camera pixel (≈ Nyquist for a
-//   230 nm FWHM PSF).
 const DEFAULT_PARAMS: SimulationParams = {
   photonsPerCycle: 5000,
   backgroundPerPixel: 20,
@@ -74,10 +51,6 @@ function buildInput(
         nPerLine: Math.max(2, Math.floor(total / 2)),
       };
     case 'ring':
-      // Native microtubule outer diameter is 25 nm, but primary + secondary
-      // antibody stacks used in dSTORM add ~17.5 nm per side, so immuno-
-      // labelled microtubules appear as ~60 nm hollow cylinders (Dempsey et
-      // al., Weber et al.). 60 nm is the standard benchmark resolution target.
       return { kind: 'microtubule-ring', diameterNm: 60, nEmitters: total };
     case 'actin':
       return {
@@ -105,11 +78,12 @@ export default function Page() {
   const [result, setResult] = useState<SimulationResult | null>(null);
   const [progress, setProgress] = useState(0);
   const [running, setRunning] = useState(false);
-  const [liveCamera, setLiveCamera] = useState<LiveCameraState | null>(null);
 
-  // Restore state from the URL on mount so shared links actually round-trip.
-  // Runs once; we intentionally don't sync back to the URL on every state
-  // change — the user triggers that explicitly with the "Share URL" button.
+  // Live localization stream — grows during acquisition, replaced by
+  // result.localizations once the run finishes.
+  const [liveLocs, setLiveLocs] = useState<Localization[]>([]);
+  const [liveFrame, setLiveFrame] = useState(0);
+
   useEffect(() => {
     if (typeof window === 'undefined' || !window.location.search) return;
     const decoded = decodeQueryToParams(window.location.search, DEFAULT_PARAMS);
@@ -126,13 +100,10 @@ export default function Page() {
     return generateGroundTruth(input, FIELD_SIZE_NM);
   }, [preset, densityPerUm2, uploadedImage]);
 
-  // High-resolution previews rendered off-thread at 10 nm/pixel (matches reconstruction)
   const preview = usePreviewWorker(groundTruth, params.psfSigmaNm);
   const groundTruthPixels = preview.groundTruth;
   const diffractionLimitedPixels = preview.diffractionLimited;
   const previewSize = { width: preview.width, height: preview.height };
-
-  const hasReconstruction = result !== null;
 
   const runningRef = useRef(false);
 
@@ -141,12 +112,16 @@ export default function Page() {
     runningRef.current = true;
     setRunning(true);
     setProgress(0);
-    setLiveCamera(null);
+    setLiveLocs([]);
+    setLiveFrame(0);
     setResult(null);
     try {
       const r = await runSimulation(groundTruth, params, {
         onProgress: (f) => setProgress(f),
-        onFrame: (u) => setLiveCamera(u),
+        onFrame: (u) => {
+          setLiveLocs(u.localizations);
+          setLiveFrame(u.frameIndex);
+        },
       });
       setResult(r);
     } finally {
@@ -157,9 +132,14 @@ export default function Page() {
 
   const onReset = useCallback(() => {
     setResult(null);
-    setLiveCamera(null);
+    setLiveLocs([]);
+    setLiveFrame(0);
     setProgress(0);
   }, []);
+
+  // The reconstruction gets live locs during acquisition, final locs after.
+  const displayLocs = result?.localizations ?? liveLocs;
+  const displayFieldNm = result?.groundTruth.fieldSizeNm ?? FIELD_SIZE_NM;
 
   return (
     <main className="min-h-screen px-4 py-4 sm:px-6 sm:py-6 max-w-7xl mx-auto pb-24 lg:pb-6">
@@ -193,35 +173,16 @@ export default function Page() {
               />
             </div>
             <div className="min-w-[72vw] snap-center md:min-w-0">
-              {hasReconstruction ? (
-                <ProgressiveReconstruction
-                  localizations={result.localizations}
-                  fieldSizeNm={result.groundTruth.fieldSizeNm}
-                  outputPixelSizeNm={10}
-                  totalFrames={params.nFrames}
-                />
-              ) : (
-                <SimulatorCanvas
-                  pixels={null}
-                  width={params.fieldSizePx.width}
-                  height={params.fieldSizePx.height}
-                  title="STORM reconstruction"
-                  colormap="hot"
-                />
-              )}
+              <ProgressiveReconstruction
+                localizations={displayLocs}
+                fieldSizeNm={displayFieldNm}
+                outputPixelSizeNm={10}
+                totalFrames={params.nFrames}
+                currentFrameIndex={liveFrame}
+                isRunning={running}
+              />
             </div>
           </div>
-
-          <CameraView
-            framePixels={liveCamera?.framePixels ?? null}
-            cumulativePixels={liveCamera?.cumulativePixels ?? null}
-            width={liveCamera?.width ?? params.fieldSizePx.width}
-            height={liveCamera?.height ?? params.fieldSizePx.height}
-            frameIndex={liveCamera?.frameIndex ?? 0}
-            totalFrames={liveCamera?.totalFrames ?? 0}
-            nLocalizationsSoFar={liveCamera?.nLocalizationsSoFar ?? 0}
-            isRunning={running}
-          />
 
           <PresetPicker
             value={preset}
@@ -261,7 +222,6 @@ export default function Page() {
           />
         </div>
 
-        {/* ── Controls: collapsible on mobile, always-visible on lg ── */}
         <div>
           <details className="group lg:open" open>
             <summary className="flex cursor-pointer items-center justify-between rounded-lg border border-slate-800 bg-slate-900/50 px-4 py-3 text-sm font-semibold text-slate-300 lg:hidden">
