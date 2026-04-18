@@ -162,47 +162,54 @@ export default function Page() {
   }, []);
 
   return (
-    <main className="min-h-screen p-6 max-w-7xl mx-auto">
-      <header className="mb-6">
-        <h1 className="text-3xl font-bold">STORM: Breaking the Diffraction Limit</h1>
-        <p className="text-slate-400 mt-2">
+    <main className="min-h-screen px-4 py-4 sm:px-6 sm:py-6 max-w-7xl mx-auto pb-24 lg:pb-6">
+      <header className="mb-4 sm:mb-6">
+        <h1 className="text-2xl sm:text-3xl font-bold">STORM: Breaking the Diffraction Limit</h1>
+        <p className="text-slate-400 mt-1 text-sm sm:text-base">
           An interactive super-resolution microscopy simulator.
         </p>
       </header>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2 flex flex-col gap-6">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <SimulatorCanvas
-              pixels={groundTruthPixels}
-              width={previewSize.width}
-              height={previewSize.height}
-              title="Ground truth"
-              colormap="grayscale"
-            />
-            <SimulatorCanvas
-              pixels={diffractionLimitedPixels}
-              width={previewSize.width}
-              height={previewSize.height}
-              title="Diffraction-limited"
-              colormap="fire"
-            />
-            {hasReconstruction ? (
-              <ProgressiveReconstruction
-                localizations={result.localizations}
-                fieldSizeNm={result.groundTruth.fieldSizeNm}
-                outputPixelSizeNm={10}
-                totalFrames={params.nFrames}
-              />
-            ) : (
+      <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2 flex flex-col gap-4 sm:gap-6">
+          {/* ── Image panels: horizontal scroll on mobile, 3-col grid on md+ ── */}
+          <div className="flex gap-4 overflow-x-auto snap-x snap-mandatory -mx-4 px-4 pb-2 sm:-mx-6 sm:px-6 md:mx-0 md:px-0 md:pb-0 md:grid md:grid-cols-3 md:overflow-visible">
+            <div className="min-w-[72vw] snap-center md:min-w-0">
               <SimulatorCanvas
-                pixels={null}
-                width={params.fieldSizePx.width}
-                height={params.fieldSizePx.height}
-                title="STORM reconstruction"
-                colormap="hot"
+                pixels={groundTruthPixels}
+                width={previewSize.width}
+                height={previewSize.height}
+                title="Ground truth"
+                colormap="grayscale"
               />
-            )}
+            </div>
+            <div className="min-w-[72vw] snap-center md:min-w-0">
+              <SimulatorCanvas
+                pixels={diffractionLimitedPixels}
+                width={previewSize.width}
+                height={previewSize.height}
+                title="Diffraction-limited"
+                colormap="fire"
+              />
+            </div>
+            <div className="min-w-[72vw] snap-center md:min-w-0">
+              {hasReconstruction ? (
+                <ProgressiveReconstruction
+                  localizations={result.localizations}
+                  fieldSizeNm={result.groundTruth.fieldSizeNm}
+                  outputPixelSizeNm={10}
+                  totalFrames={params.nFrames}
+                />
+              ) : (
+                <SimulatorCanvas
+                  pixels={null}
+                  width={params.fieldSizePx.width}
+                  height={params.fieldSizePx.height}
+                  title="STORM reconstruction"
+                  colormap="hot"
+                />
+              )}
+            </div>
           </div>
 
           <CameraView
@@ -222,9 +229,10 @@ export default function Page() {
             onImageLoaded={setUploadedImage}
           />
 
-          <div className="flex items-center gap-4">
+          {/* Action buttons — sticky bottom bar on mobile */}
+          <div className="fixed bottom-0 inset-x-0 z-40 flex items-center justify-center gap-3 border-t border-slate-800 bg-slate-950/95 px-4 py-3 backdrop-blur-sm lg:static lg:border-0 lg:bg-transparent lg:p-0 lg:justify-start lg:backdrop-blur-none">
             <Button onClick={onStart} disabled={running || !groundTruth}>
-              {running ? `Running… ${Math.round(progress * 100)}%` : '▶ Start Acquisition'}
+              {running ? `Running… ${Math.round(progress * 100)}%` : '▶ Start'}
             </Button>
             <Button variant="outline" onClick={onReset} disabled={running}>
               Reset
@@ -238,7 +246,7 @@ export default function Page() {
                 alert('URL copied to clipboard!');
               }}
             >
-              Share URL
+              Share
             </Button>
           </div>
 
@@ -253,8 +261,17 @@ export default function Page() {
           />
         </div>
 
+        {/* ── Controls: collapsible on mobile, always-visible on lg ── */}
         <div>
-          <ControlPanel params={params} onChange={setParams} />
+          <details className="group lg:open" open>
+            <summary className="flex cursor-pointer items-center justify-between rounded-lg border border-slate-800 bg-slate-900/50 px-4 py-3 text-sm font-semibold text-slate-300 lg:hidden">
+              Simulation parameters
+              <span className="text-xs text-slate-500 transition-transform group-open:rotate-180">▼</span>
+            </summary>
+            <div className="lg:block">
+              <ControlPanel params={params} onChange={setParams} />
+            </div>
+          </details>
         </div>
       </div>
     </main>

@@ -129,8 +129,8 @@ function CameraPanel({
       <div className="relative">
         <canvas
           ref={canvasRef}
-          className="rounded-md border border-slate-800 bg-slate-900"
-          style={{ width: 256, height: 256, imageRendering: 'pixelated' }}
+          className="w-full max-w-[256px] aspect-square rounded-md border border-slate-800 bg-slate-900"
+          style={{ imageRendering: 'pixelated' }}
         />
         {empty && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-xs text-slate-600">

@@ -8,6 +8,7 @@ import { Slider } from '@/components/ui/slider';
 import { drawPixelBufferToCanvas } from '@/lib/rendering/canvas';
 import { hot, type Colormap } from '@/lib/rendering/colormap';
 import { WebGPUReconstructor, cpuReconstruct } from '@/lib/rendering/webgpu-renderer';
+import { ScaleBar } from './ScaleBar';
 import type { Localization } from '@/lib/simulator/types';
 
 const asNumber = (v: number | readonly number[]): number =>
@@ -140,13 +141,16 @@ export function ProgressiveReconstruction({
       className="flex flex-col items-center gap-2"
     >
       <div className="text-sm font-medium text-slate-300">STORM reconstruction</div>
-      <canvas
-        ref={canvasRef}
-        className="rounded-md border border-slate-800 bg-slate-900"
-        style={{ width: 256, height: 256, imageRendering: 'pixelated' }}
-      />
+      <div className="relative w-full max-w-[256px] aspect-square">
+        <canvas
+          ref={canvasRef}
+          className="block h-full w-full rounded-md border border-slate-800 bg-slate-900"
+          style={{ imageRendering: 'pixelated' }}
+        />
+        <ScaleBar fieldWidthNm={fieldSizeNm.width} />
+      </div>
       {/* ── YouTube-style controls ── */}
-      <div className="flex w-[256px] flex-col gap-1.5">
+      <div className="flex w-full max-w-[256px] flex-col gap-1.5">
         <div className="flex items-center gap-1.5">
           <Button
             variant="ghost"
