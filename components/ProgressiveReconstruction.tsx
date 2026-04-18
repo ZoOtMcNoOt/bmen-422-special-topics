@@ -1,13 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { motion } from 'motion/react';
 import { Pause, Play, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { drawPixelBufferToCanvas } from '@/lib/rendering/canvas';
 import { hot, type Colormap } from '@/lib/rendering/colormap';
-import { WebGPUReconstructor, cpuReconstruct } from '@/lib/rendering/webgpu-renderer';
+import { reconstructImage } from '@/lib/simulator/reconstruction';
 import { ScaleBar } from './ScaleBar';
 import type { Localization } from '@/lib/simulator/types';
 
@@ -15,15 +15,12 @@ const asNumber = (v: number | readonly number[]): number =>
   (Array.isArray(v) ? v[0] : v) as number;
 
 export type ProgressiveReconstructionProps = {
-  /** Localizations to render — grows live during acquisition, final after. */
   localizations: Localization[];
   fieldSizeNm: { width: number; height: number };
   outputPixelSizeNm: number;
   colormap?: Colormap;
   totalFrames: number;
-  /** Current frame index — advances live during acquisition. */
   currentFrameIndex: number;
-  /** True while runSimulation is running. */
   isRunning: boolean;
 };
 
@@ -40,24 +37,15 @@ export function ProgressiveReconstruction({
   isRunning,
 }: ProgressiveReconstructionProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const gpuRef = useRef<WebGPUReconstructor | null>(null);
   const renderIdRef = useRef(0);
 
-  // During acquisition: slider tracks the live frame. After: user controls it.
   const [userSlider, setUserSlider] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
-  const [gpuReady, setGpuReady] = useState(false);
 
-  const outW = Math.round(fieldSizeNm.width / outputPixelSizeNm);
-  const outH = Math.round(fieldSizeNm.height / outputPixelSizeNm);
-
-  // During acquisition the slider tracks live progress. After acquisition the
-  // user owns it (defaults to the final frame).
   const sliderFrame = isRunning
     ? currentFrameIndex
     : (userSlider ?? totalFrames);
 
-  // Build a lookup: for each camera frame, how many locs exist up to that frame.
   const locCountAtFrame = useMemo(() => {
     if (localizations.length === 0) return new Uint32Array(totalFrames + 1);
     const arr = new Uint32Array(totalFrames + 1);
@@ -71,61 +59,28 @@ export function ProgressiveReconstruction({
   }, [localizations, totalFrames]);
 
   const nLocsToRender = isRunning
-    ? localizations.length // during acquisition: render everything we have
+    ? localizations.length
     : locCountAtFrame[Math.min(sliderFrame, totalFrames)];
 
-  // Init WebGPU (best-effort; falls back to CPU if unavailable)
-  useEffect(() => {
-    let disposed = false;
-    WebGPUReconstructor.create().then((gpu) => {
-      if (disposed || !gpu) return;
-      gpuRef.current = gpu;
-      setGpuReady(true);
-    });
-    return () => {
-      disposed = true;
-      gpuRef.current?.dispose();
-      gpuRef.current = null;
-    };
-  }, []);
-
-  // Upload loc data to GPU when localizations change
-  useEffect(() => {
-    if (localizations.length === 0) return;
-    gpuRef.current?.uploadLocalizations(localizations, fieldSizeNm, outputPixelSizeNm);
-  }, [localizations, fieldSizeNm, outputPixelSizeNm, gpuReady]);
-
-  // Re-render the reconstruction whenever nLocsToRender or data changes
+  // Render reconstruction — plain JS, ~5 ms for 1k locs at 1000×1000.
+  // No WebGPU/WASM needed; the erf-based pixel integration only touches
+  // ~9 pixels per localization so even 10k locs finish in <20 ms.
   useEffect(() => {
     const id = ++renderIdRef.current;
     const canvas = canvasRef.current;
     if (!canvas || nLocsToRender === 0) return;
 
-    const gpu = gpuRef.current;
-    if (gpu) {
-      gpu.render(nLocsToRender).then((pixels) => {
-        if (renderIdRef.current !== id) return;
-        drawPixelBufferToCanvas(canvas, pixels, outW, outH, colormap);
-      }).catch(() => {
-        // GPU failed — fall back to CPU this frame
-        if (renderIdRef.current !== id) return;
-        const { pixels, width, height } = cpuReconstruct(
-          localizations, nLocsToRender, fieldSizeNm, outputPixelSizeNm,
-        );
-        drawPixelBufferToCanvas(canvas, pixels, width, height, colormap);
-      });
-    } else {
-      const { pixels, width, height } = cpuReconstruct(
-        localizations, nLocsToRender, fieldSizeNm, outputPixelSizeNm,
-      );
-      drawPixelBufferToCanvas(canvas, pixels, width, height, colormap);
-    }
-  }, [nLocsToRender, outW, outH, colormap, localizations, fieldSizeNm, outputPixelSizeNm, gpuReady]);
+    const subset = nLocsToRender >= localizations.length
+      ? localizations
+      : localizations.slice(0, nLocsToRender);
+    const r = reconstructImage(subset, { fieldSizeNm, outputPixelSizeNm });
 
-  // Auto-play: advance slider every PLAYBACK_INTERVAL ms (post-acquisition only).
-  // When the slider reaches totalFrames the updater pins it and the interval
-  // becomes a no-op until the user restarts. Cleanup fires when `playing`
-  // toggles or the component unmounts.
+    if (renderIdRef.current === id) {
+      drawPixelBufferToCanvas(canvas, r.pixels, r.width, r.height, colormap);
+    }
+  }, [nLocsToRender, colormap, localizations, fieldSizeNm, outputPixelSizeNm]);
+
+  // Auto-play
   useEffect(() => {
     if (!playing || isRunning) return;
     const step = Math.max(1, Math.round(totalFrames / 200));
@@ -180,17 +135,11 @@ export function ProgressiveReconstruction({
         <ScaleBar fieldWidthNm={fieldSizeNm.width} />
       </div>
 
-      {/* ── Timeline controls ── */}
       <div className="flex w-full max-w-[256px] flex-col gap-1.5">
-        {/* Progress bar during acquisition / scrub bar after */}
         <div className="flex items-center gap-1.5">
           {!isRunning && hasData && (
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              onClick={togglePlay}
-              aria-label={playing ? 'Pause' : 'Play'}
-            >
+            <Button variant="ghost" size="icon-xs" onClick={togglePlay}
+              aria-label={playing ? 'Pause' : 'Play'}>
               {playing ? <Pause /> : <Play />}
             </Button>
           )}
@@ -210,21 +159,14 @@ export function ProgressiveReconstruction({
             aria-label="Reconstruction timeline"
           />
           {!isRunning && hasData && (
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              onClick={restart}
-              aria-label="Restart"
-            >
+            <Button variant="ghost" size="icon-xs" onClick={restart}
+              aria-label="Restart">
               <RotateCcw />
             </Button>
           )}
         </div>
-        <div className="flex items-baseline justify-between px-0.5 text-[10px] tabular-nums">
-          <span className="text-slate-400">{headline}</span>
-          <span className={`font-medium ${gpuReady ? 'text-green-500' : 'text-slate-600'}`}>
-            {gpuReady ? 'GPU' : 'CPU'}
-          </span>
+        <div className="px-0.5 text-[10px] text-slate-400 tabular-nums">
+          {headline}
         </div>
       </div>
     </motion.div>
