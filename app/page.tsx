@@ -7,6 +7,7 @@ import { ControlPanel } from '@/components/ControlPanel';
 import { PresetPicker } from '@/components/PresetPicker';
 import { ThompsonPlot } from '@/components/ThompsonPlot';
 import { CameraView } from '@/components/CameraView';
+import { ProgressiveReconstruction } from '@/components/ProgressiveReconstruction';
 import { decodeQueryToParams, encodeParamsToQuery } from '@/lib/url-state';
 import { generateGroundTruth } from '@/lib/simulator/groundTruth';
 import { runSimulation } from '@/lib/simulator/runSimulation';
@@ -131,9 +132,7 @@ export default function Page() {
   const diffractionLimitedPixels = preview.diffractionLimited;
   const previewSize = { width: preview.width, height: preview.height };
 
-  // Reconstruction canvas pixels (from last simulation result)
-  const reconstructionPixels = useMemo(() => result?.reconstruction ?? null, [result]);
-  const reconstructionSize = result?.reconstructionSize ?? params.fieldSizePx;
+  const hasReconstruction = result !== null;
 
   const runningRef = useRef(false);
 
@@ -188,13 +187,22 @@ export default function Page() {
               title="Diffraction-limited"
               colormap="fire"
             />
-            <SimulatorCanvas
-              pixels={reconstructionPixels}
-              width={reconstructionSize.width}
-              height={reconstructionSize.height}
-              title="STORM reconstruction"
-              colormap="hot"
-            />
+            {hasReconstruction ? (
+              <ProgressiveReconstruction
+                localizations={result.localizations}
+                fieldSizeNm={result.groundTruth.fieldSizeNm}
+                outputPixelSizeNm={10}
+                totalFrames={params.nFrames}
+              />
+            ) : (
+              <SimulatorCanvas
+                pixels={null}
+                width={params.fieldSizePx.width}
+                height={params.fieldSizePx.height}
+                title="STORM reconstruction"
+                colormap="hot"
+              />
+            )}
           </div>
 
           <CameraView
