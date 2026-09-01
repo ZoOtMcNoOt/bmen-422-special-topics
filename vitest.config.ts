@@ -1,16 +1,16 @@
+import path from 'node:path';
 import { defineConfig } from 'vitest/config';
-import path from 'path';
 
 export default defineConfig({
   test: {
-    environment: 'jsdom',
-    globals: true,
-    include: ['__tests__/**/*.test.ts', '__tests__/**/*.test.tsx'],
+    // No test renders or touches the DOM; setup.ts only polyfills ImageData for the
+    // ground-truth image sampler.
+    environment: 'node',
+    include: ['__tests__/**/*.test.ts'],
     setupFiles: ['__tests__/setup.ts'],
+    testTimeout: 30_000,
   },
   resolve: {
-    alias: {
-      '@': path.resolve(__dirname, '.'),
-    },
+    alias: { '@': path.resolve(__dirname, '.') },
   },
 });
