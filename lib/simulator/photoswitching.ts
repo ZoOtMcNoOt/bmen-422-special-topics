@@ -1,55 +1,34 @@
+import { clamp } from '@/lib/utils';
 import type { EmitterState } from './types';
 
+/** Duty cycles are clamped to this range so kOn stays finite and positive. */
+const MIN_DUTY_CYCLE = 1e-6;
+const MAX_DUTY_CYCLE = 0.99;
+
 export function initEmitterStates(n: number): EmitterState[] {
-  const states: EmitterState[] = [];
-  for (let i = 0; i < n; i++) {
-    states.push({ isOn: false, bleached: false });
-  }
+  const states: EmitterState[] = new Array(n);
+  for (let i = 0; i < n; i++) states[i] = { isOn: false };
   return states;
 }
 
-/**
- * Advance the photoswitching state of every emitter by one frame.
- * Mutates `states` in place.
- *
- * Transitions (per frame):
- *   OFF → ON with probability kOn
- *   ON → OFF with probability kOff
- *   ON → bleached with probability pBleach
- *   bleached → (nothing, permanent)
- */
+/** Advance every emitter one frame through an OFF ⇄ ON Markov chain. Mutates in place. */
 export function stepPhotoswitching(
   states: EmitterState[],
   kOn: number,
   kOff: number,
-  pBleach: number
+  rng: () => number = Math.random
 ): void {
   for (const s of states) {
-    if (s.bleached) continue;
     if (s.isOn) {
-      if (Math.random() < pBleach) {
-        s.isOn = false;
-        s.bleached = true;
-      } else if (Math.random() < kOff) {
-        s.isOn = false;
-      }
-    } else {
-      if (Math.random() < kOn) {
-        s.isOn = true;
-      }
+      if (rng() < kOff) s.isOn = false;
+    } else if (rng() < kOn) {
+      s.isOn = true;
     }
   }
 }
 
-/**
- * Convert a target duty cycle into kOn/kOff rates, given a chosen kOff.
- * duty = kOn / (kOn + kOff)  →  kOn = duty * kOff / (1 - duty)
- */
-export function ratesFromDutyCycle(
-  dutyCycle: number,
-  kOff: number
-): { kOn: number; kOff: number } {
-  const clamped = Math.max(1e-6, Math.min(0.99, dutyCycle));
-  const kOn = (clamped * kOff) / (1 - clamped);
-  return { kOn, kOff };
+/** Steady-state duty = kOn / (kOn + kOff)  ⇒  kOn = duty · kOff / (1 − duty). */
+export function kOnFromDutyCycle(dutyCycle: number, kOff: number): number {
+  const d = clamp(dutyCycle, MIN_DUTY_CYCLE, MAX_DUTY_CYCLE);
+  return (d * kOff) / (1 - d);
 }

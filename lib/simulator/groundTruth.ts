@@ -1,148 +1,99 @@
-import type { GroundTruth, GroundTruthInput, Emitter } from './types';
+import type { Emitter, GroundTruth, GroundTruthInput } from './types';
 
-export function generateGroundTruth(
-  input: GroundTruthInput,
-  fieldSizeNm: { width: number; height: number }
-): GroundTruth {
+type Field = { width: number; height: number };
+
+/** Rejection sampling gives up after this many draws per requested emitter. */
+const MAX_REJECTION_ATTEMPTS_PER_EMITTER = 1000;
+
+export function generateGroundTruth(input: GroundTruthInput, field: Field): GroundTruth {
   switch (input.kind) {
-    case 'two-lines':
-      return generateTwoLines(input, fieldSizeNm);
-    case 'microtubule-ring':
-      return generateRing(input, fieldSizeNm);
-    case 'actin-periodic':
-      return generateActin(input, fieldSizeNm);
-    case 'image':
-      return generateFromImage(input, fieldSizeNm);
+    case 'two-lines': return twoLines(input, field);
+    case 'ring': return ring(input, field);
+    case 'actin': return actin(input, field);
+    case 'image': return fromImage(input, field);
   }
 }
 
-function generateTwoLines(
-  input: { kind: 'two-lines'; separationNm: number; length: number; nPerLine: number },
-  fieldSizeNm: { width: number; height: number }
+function twoLines(
+  { separationNm, lengthNm, nPerLine }: Extract<GroundTruthInput, { kind: 'two-lines' }>,
+  field: Field
 ): GroundTruth {
-  const cx = fieldSizeNm.width / 2;
-  const cy = fieldSizeNm.height / 2;
-  const halfLength = input.length / 2;
+  const cx = field.width / 2;
+  const cy = field.height / 2;
   const emitters: Emitter[] = [];
-  for (let i = 0; i < input.nPerLine; i++) {
-    const t = input.nPerLine === 1 ? 0.5 : i / (input.nPerLine - 1);
-    const x = cx - halfLength + t * input.length;
-    emitters.push({ x, y: cy - input.separationNm / 2 });
-    emitters.push({ x, y: cy + input.separationNm / 2 });
+  for (let i = 0; i < nPerLine; i++) {
+    const t = nPerLine === 1 ? 0.5 : i / (nPerLine - 1);
+    const x = cx - lengthNm / 2 + t * lengthNm;
+    emitters.push({ x, y: cy - separationNm / 2 }, { x, y: cy + separationNm / 2 });
   }
-  return {
-    emitters,
-    fieldSizeNm,
-    label: `Two lines, ${input.separationNm} nm separation`,
-  };
+  return { emitters, fieldSizeNm: field, label: `Two lines, ${separationNm} nm apart` };
 }
 
-function generateRing(
-  input: { kind: 'microtubule-ring'; diameterNm: number; nEmitters: number },
-  fieldSizeNm: { width: number; height: number }
+function ring(
+  { diameterNm, nEmitters }: Extract<GroundTruthInput, { kind: 'ring' }>,
+  field: Field
 ): GroundTruth {
-  const cx = fieldSizeNm.width / 2;
-  const cy = fieldSizeNm.height / 2;
-  const r = input.diameterNm / 2;
-  const emitters: Emitter[] = [];
-  for (let i = 0; i < input.nEmitters; i++) {
-    const theta = (2 * Math.PI * i) / input.nEmitters;
-    emitters.push({ x: cx + r * Math.cos(theta), y: cy + r * Math.sin(theta) });
-  }
-  return {
-    emitters,
-    fieldSizeNm,
-    label: `Microtubule ring, ${input.diameterNm} nm diameter`,
-  };
+  const cx = field.width / 2;
+  const cy = field.height / 2;
+  const r = diameterNm / 2;
+  const emitters: Emitter[] = Array.from({ length: nEmitters }, (_, i) => {
+    const theta = (2 * Math.PI * i) / nEmitters;
+    return { x: cx + r * Math.cos(theta), y: cy + r * Math.sin(theta) };
+  });
+  return { emitters, fieldSizeNm: field, label: `Ring, ${diameterNm} nm diameter` };
 }
 
-function generateActin(
-  input: {
-    kind: 'actin-periodic';
-    periodNm: number;
-    lengthNm: number;
-    nRungs: number;
-    nPerRung: number;
-  },
-  fieldSizeNm: { width: number; height: number }
+function actin(
+  { periodNm, rungLengthNm, nRungs, nPerRung }: Extract<GroundTruthInput, { kind: 'actin' }>,
+  field: Field
 ): GroundTruth {
-  const cx = fieldSizeNm.width / 2;
-  const cy = fieldSizeNm.height / 2;
-  const halfSpan = ((input.nRungs - 1) * input.periodNm) / 2;
-  const rungHalfLen = input.lengthNm / 2;
+  const cx = field.width / 2;
+  const cy = field.height / 2;
+  const halfSpan = ((nRungs - 1) * periodNm) / 2;
   const emitters: Emitter[] = [];
-  for (let r = 0; r < input.nRungs; r++) {
-    const x = cx - halfSpan + r * input.periodNm;
-    for (let i = 0; i < input.nPerRung; i++) {
-      const t = input.nPerRung === 1 ? 0.5 : i / (input.nPerRung - 1);
-      const y = cy - rungHalfLen + t * input.lengthNm;
-      emitters.push({ x, y });
+  for (let r = 0; r < nRungs; r++) {
+    const x = cx - halfSpan + r * periodNm;
+    for (let i = 0; i < nPerRung; i++) {
+      const t = nPerRung === 1 ? 0.5 : i / (nPerRung - 1);
+      emitters.push({ x, y: cy - rungLengthNm / 2 + t * rungLengthNm });
     }
   }
-  return {
-    emitters,
-    fieldSizeNm,
-    label: `Actin periodic scaffold, ${input.periodNm} nm period`,
-  };
+  return { emitters, fieldSizeNm: field, label: `Actin rings, ${periodNm} nm period` };
 }
 
-function generateFromImage(
-  input: { kind: 'image'; imageData: ImageData; nEmitters: number },
-  fieldSizeNm: { width: number; height: number }
+function fromImage(
+  { imageData, nEmitters }: Extract<GroundTruthInput, { kind: 'image' }>,
+  field: Field
 ): GroundTruth {
-  const { imageData, nEmitters } = input;
   const { width, height, data } = imageData;
 
-  // Convert to grayscale intensity in [0, 1]
+  // Luminance normalised to peak 1 becomes the sampling probability.
   const intensity = new Float32Array(width * height);
-  let maxIntensity = 0;
-  for (let i = 0; i < width * height; i++) {
-    const r = data[i * 4];
-    const g = data[i * 4 + 1];
-    const b = data[i * 4 + 2];
-    const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  let peak = 0;
+  for (let i = 0; i < intensity.length; i++) {
+    const lum = (0.2126 * data[i * 4] + 0.7152 * data[i * 4 + 1] + 0.0722 * data[i * 4 + 2]) / 255;
     intensity[i] = lum;
-    if (lum > maxIntensity) maxIntensity = lum;
+    if (lum > peak) peak = lum;
   }
-  if (maxIntensity === 0) {
-    throw new Error('Image contains no bright pixels to sample from');
-  }
-  // Normalize to peak = 1
-  for (let i = 0; i < intensity.length; i++) intensity[i] /= maxIntensity;
+  if (peak === 0) throw new Error('Image has no bright pixels to sample from');
+  for (let i = 0; i < intensity.length; i++) intensity[i] /= peak;
 
-  // Rejection sample emitters
+  // Letterbox the image into the field, preserving aspect ratio.
+  const scale = Math.min(field.width / width, field.height / height);
+  const offsetX = (field.width - width * scale) / 2;
+  const offsetY = (field.height - height * scale) / 2;
+
   const emitters: Emitter[] = [];
-  let attempts = 0;
-  const maxAttempts = nEmitters * 1000;
-  while (emitters.length < nEmitters && attempts < maxAttempts) {
-    attempts++;
+  const maxAttempts = nEmitters * MAX_REJECTION_ATTEMPTS_PER_EMITTER;
+  for (let attempts = 0; emitters.length < nEmitters && attempts < maxAttempts; attempts++) {
     const px = Math.floor(Math.random() * width);
     const py = Math.floor(Math.random() * height);
-    const p = intensity[py * width + px];
-    if (Math.random() < p) {
-      // Map pixel (px, py) to field coordinates
-      // Letterbox: fit image into field preserving aspect ratio
-      const imgAspect = width / height;
-      const fieldAspect = fieldSizeNm.width / fieldSizeNm.height;
-      let scale: number;
-      let offsetX = 0;
-      let offsetY = 0;
-      if (imgAspect > fieldAspect) {
-        scale = fieldSizeNm.width / width;
-        offsetY = (fieldSizeNm.height - height * scale) / 2;
-      } else {
-        scale = fieldSizeNm.height / height;
-        offsetX = (fieldSizeNm.width - width * scale) / 2;
-      }
-      const x = offsetX + (px + Math.random()) * scale;
-      const y = offsetY + (py + Math.random()) * scale;
-      emitters.push({ x, y });
+    if (Math.random() < intensity[py * width + px]) {
+      emitters.push({
+        x: offsetX + (px + Math.random()) * scale,
+        y: offsetY + (py + Math.random()) * scale,
+      });
     }
   }
-
-  return {
-    emitters,
-    fieldSizeNm,
-    label: `Uploaded image (${nEmitters} emitters)`,
-  };
+  return { emitters, fieldSizeNm: field, label: `Uploaded image, ${emitters.length} emitters` };
 }

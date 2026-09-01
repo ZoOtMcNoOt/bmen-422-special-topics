@@ -1,87 +1,79 @@
-// Emitter — a single fluorophore's nominal position (nm, in sample coordinates)
-export type Emitter = {
-  x: number;
-  y: number;
-};
+// ─── Sample ────────────────────────────────────────────────────────────────
 
-// Per-emitter photoswitching state, updated every frame
-export type EmitterState = {
-  isOn: boolean;
-  bleached: boolean;
-};
+/** A single fluorophore's position in sample coordinates (nm). */
+export type Emitter = { x: number; y: number };
 
-// Ground truth: a collection of emitters inside a defined field of view
+export type EmitterState = { isOn: boolean };
+
 export type GroundTruth = {
   emitters: Emitter[];
   fieldSizeNm: { width: number; height: number };
   label: string;
 };
 
-// Input spec for ground truth generation
 export type GroundTruthInput =
-  | { kind: 'two-lines'; separationNm: number; length: number; nPerLine: number }
-  | { kind: 'microtubule-ring'; diameterNm: number; nEmitters: number }
-  | { kind: 'actin-periodic'; periodNm: number; lengthNm: number; nRungs: number; nPerRung: number }
+  | { kind: 'two-lines'; separationNm: number; lengthNm: number; nPerLine: number }
+  | { kind: 'ring'; diameterNm: number; nEmitters: number }
+  | { kind: 'actin'; periodNm: number; rungLengthNm: number; nRungs: number; nPerRung: number }
   | { kind: 'image'; imageData: ImageData; nEmitters: number };
 
-// Full set of simulation parameters
+// ─── Acquisition ───────────────────────────────────────────────────────────
+
+export type RigorMode = 'pedagogical' | 'rigorous';
+
 export type SimulationParams = {
-  photonsPerCycle: number;        // N (photons emitted during one ON event)
-  backgroundPerPixel: number;     // b (photons)
-  dutyCycle: number;              // fraction ON at steady state
+  photonsPerCycle: number;    // N — photons detected per ON event
+  backgroundPerPixel: number; // b — photons per camera pixel per frame
+  dutyCycle: number;          // fraction of molecules ON at steady state
   nFrames: number;
   driftRateNmPerFrame: number;
   correctDrift: boolean;
-  rigorMode: 'pedagogical' | 'rigorous';
-  pixelSizeNm: number;            // e.g. 160 nm
-  psfSigmaNm: number;             // e.g. 130 nm (≈ 0.21 λ / NA)
+  rigorMode: RigorMode;
+  pixelSizeNm: number;        // a — camera pixel pitch projected to the sample
+  psfSigmaNm: number;         // σ of the Gaussian PSF
   fieldSizePx: { width: number; height: number };
 };
 
-// A single rendered camera frame
 export type Frame = {
-  pixels: Float32Array;           // photons per pixel, row-major
+  pixels: Float32Array; // photons per pixel, row-major
   width: number;
   height: number;
   frameIndex: number;
 };
 
-// A single-molecule localization
+// ─── Analysis ──────────────────────────────────────────────────────────────
+
 export type Localization = {
-  x: number;                      // nm
-  y: number;                      // nm
-  sigmaLocNm: number;             // estimated uncertainty
+  x: number;          // nm
+  y: number;          // nm
+  sigmaLocNm: number; // Thompson estimate from this loc's photon count
   nPhotons: number;
   frameIndex: number;
 };
 
-// Result of a full simulation run
+/**
+ * A square window onto the sample, in nm. Every rendered panel crops to the
+ * same view box so scale bars and features are directly comparable.
+ */
+export type ViewBox = { x0: number; y0: number; sizeNm: number };
+
 export type SimulationResult = {
+  /** The parameters this result was acquired with — the UI compares against
+   *  live params to flag stale results. */
+  params: SimulationParams;
   groundTruth: GroundTruth;
+  /** Frames actually acquired — less than params.nFrames if aborted. */
+  framesCompleted: number;
   localizations: Localization[];
-  reconstruction: Float32Array;
-  reconstructionSize: { width: number; height: number };
-  // Sum projection of every rendered camera frame — what a long-exposure
-  // (non-switching) acquisition of the same sample would look like. Same
-  // shape as the camera (W × H, Float32 photons). Useful as a sanity check:
-  // dividing the integrated PSFs from this image should reproduce the
-  // ground-truth emitter map smeared by the diffraction limit.
-  summedFramesPixels: Float32Array;
-  summedFramesSize: { width: number; height: number };
-  // Median of the per-localization Thompson prediction (σ computed from
-  // each loc's apparent photon count). Labelled "measured" in the UI for
-  // historical reasons; this is really an inverse-variance proxy, NOT a
-  // direct ground-truth measurement.
-  measuredSigmaLocNm: number;
-  // Thompson prediction evaluated at the currently-selected photonsPerCycle.
-  predictedSigmaLocNm: number;
-  // Direct ground-truth measurement: median Euclidean distance from each
-  // localization to its nearest true emitter. Captures crowding artefacts
-  // the Thompson formula is blind to.
+  /** Median of each loc's own Thompson estimate. Optimistic when molecules
+   *  overlap, because the fitter attributes the merged photon count to one
+   *  molecule. */
+  apparentSigmaLocNm: number;
+  /** Median distance from each localization to the nearest true emitter.
+   *  The honest, ground-truth-referenced precision. */
   empiricalPrecisionNm: number;
   empiricalPrecisionP90Nm: number;
-  // Localizations divided by total ON-emitter-frame events. A value < 1
-  // means the local-max detector merged simultaneously-on neighbouring
-  // molecules into a single detection.
+  /** Localizations ÷ ON-emitter-frame events. Drops below 1 when the
+   *  detector merges simultaneously-on neighbours. */
   detectionEfficiency: number;
 };

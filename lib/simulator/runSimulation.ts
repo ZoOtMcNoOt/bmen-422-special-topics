@@ -1,179 +1,91 @@
-import type {
-  GroundTruth,
-  SimulationParams,
-  SimulationResult,
-  Localization,
-  Emitter,
-} from './types';
-import { initEmitterStates, stepPhotoswitching, ratesFromDutyCycle } from './photoswitching';
-import { renderFrame } from './renderFrame';
+import { median } from '@/lib/utils';
+import { computeDetectionEfficiency, computeEmpiricalPrecision } from './analysis';
+import { applyDriftToEmitter, computeDriftAtFrame, correctLocalizationDrift } from './drift';
 import { localizeFrame } from './localization';
-import { computeDriftAtFrame, applyDriftToEmitter, correctLocalizationDrift } from './drift';
-import { reconstructImage } from './reconstruction';
-import { thompsonSigmaLoc } from './thompson';
-import { computeEmpiricalPrecision, computeDetectionEfficiency } from './analysis';
+import { initEmitterStates, kOnFromDutyCycle, stepPhotoswitching } from './photoswitching';
+import { renderFrame } from './renderFrame';
+import type { Emitter, GroundTruth, Localization, SimulationParams, SimulationResult } from './types';
 
-function computeMedianSigmaLoc(locs: Localization[]): number {
-  if (locs.length === 0) return 0;
-  const sorted = locs.map((l) => l.sigmaLocNm).sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0
-    ? (sorted[mid - 1] + sorted[mid]) / 2
-    : sorted[mid];
-}
+/** ON→OFF probability per frame; sets the mean ON-event length to 2.5 frames. */
+const K_OFF_PER_FRAME = 0.4;
+/** Steps before frame 0 so the ON fraction has relaxed to its steady state. */
+const WARMUP_FRAMES = 20;
+/** Frames between yields to the event loop and live UI updates. */
+const LIVE_UPDATE_STRIDE = 50;
 
-export type LiveFrameUpdate = {
-  framePixels: Float32Array;
-  cumulativePixels: Float32Array;
-  // Snapshot of ALL localizations accumulated from frame 0 up to frameIndex.
-  // Safe to retain — runSimulation copies the array on each update.
+export type LiveUpdate = {
+  /** Every localization so far — a fresh copy each update. */
   localizations: Localization[];
-  width: number;
-  height: number;
-  frameIndex: number;
-  totalFrames: number;
-  nLocalizationsSoFar: number;
+  framesCompleted: number;
 };
 
-export type RunOptions = {
-  onProgress?: (fraction: number) => void;
-  // Called periodically (every ~50 frames + once at the end) so the UI
-  // can render the live camera view without blocking the simulation loop.
-  onFrame?: (update: LiveFrameUpdate) => void;
+type RunOptions = {
+  onUpdate?: (u: LiveUpdate) => void;
   signal?: AbortSignal;
 };
-
-// How often to surface live frames to the UI. Matches the existing event-loop
-// yield cadence so we don't add extra animation-frame work.
-const LIVE_UPDATE_STRIDE = 50;
 
 export async function runSimulation(
   groundTruth: GroundTruth,
   params: SimulationParams,
-  options: RunOptions = {}
+  { onUpdate, signal }: RunOptions = {}
 ): Promise<SimulationResult> {
-  const { onProgress, onFrame, signal } = options;
+  const cameraW = params.fieldSizePx.width * params.pixelSizeNm;
+  const cameraH = params.fieldSizePx.height * params.pixelSizeNm;
+  if (groundTruth.fieldSizeNm.width !== cameraW || groundTruth.fieldSizeNm.height !== cameraH) {
+    throw new Error(
+      `Ground-truth field ${groundTruth.fieldSizeNm.width}×${groundTruth.fieldSizeNm.height} nm ` +
+        `must equal the camera footprint ${cameraW}×${cameraH} nm`
+    );
+  }
+
   const states = initEmitterStates(groundTruth.emitters.length);
-  const { kOn, kOff } = ratesFromDutyCycle(params.dutyCycle, 0.4);
-  const pBleach = 0;
+  const kOn = kOnFromDutyCycle(params.dutyCycle, K_OFF_PER_FRAME);
+  for (let i = 0; i < WARMUP_FRAMES; i++) stepPhotoswitching(states, kOn, K_OFF_PER_FRAME);
 
-  const allLocs: Localization[] = [];
-  // Track total ON-emitter-frame events so we can report detection
-  // efficiency (localizations / true blink-frame events).
-  let totalOnFrameEvents = 0;
+  const localizations: Localization[] = [];
+  let onEvents = 0;
+  let framesCompleted = 0;
+  let lastReported = -1;
 
-  const W = params.fieldSizePx.width;
-  const H = params.fieldSizePx.height;
-  // Running sum of every rendered frame — the "what a long-exposure camera
-  // would have seen" projection. A single allocation, accumulated in place.
-  const cumulative = new Float32Array(W * H);
-
-  // Warm up so the duty cycle is near steady state from frame 0
-  for (let i = 0; i < 20; i++) stepPhotoswitching(states, kOn, kOff, pBleach);
-
-  // Hold a reference to the most-recently-rendered frame so we can flush a
-  // final live update after the loop without re-rendering.
-  let lastFramePixels: Float32Array | null = null;
+  const report = () => {
+    if (framesCompleted === lastReported) return;
+    lastReported = framesCompleted;
+    onUpdate?.({ localizations: localizations.slice(), framesCompleted });
+  };
 
   for (let f = 0; f < params.nFrames; f++) {
     if (signal?.aborted) break;
 
-    stepPhotoswitching(states, kOn, kOff, pBleach);
+    stepPhotoswitching(states, kOn, K_OFF_PER_FRAME);
     const drift = computeDriftAtFrame(f, params.driftRateNmPerFrame);
     const active: Emitter[] = [];
     for (let i = 0; i < states.length; i++) {
-      if (states[i].isOn) {
-        active.push(applyDriftToEmitter(groundTruth.emitters[i], drift));
-      }
+      if (states[i].isOn) active.push(applyDriftToEmitter(groundTruth.emitters[i], drift));
     }
-    totalOnFrameEvents += active.length;
+    onEvents += active.length;
+
     const frame = renderFrame(active, params, f);
-    lastFramePixels = frame.pixels;
-    // Accumulate into the cumulative projection.
-    for (let i = 0; i < cumulative.length; i++) cumulative[i] += frame.pixels[i];
+    for (const l of localizeFrame(frame, params)) localizations.push(l);
+    framesCompleted = f + 1;
 
-    const locs = localizeFrame(frame, params);
-    for (const l of locs) allLocs.push(l);
-
-    if (f % LIVE_UPDATE_STRIDE === 0) {
-      onProgress?.(f / params.nFrames);
-      // Pass copies of the buffers we keep mutating so the UI can hold on
-      // to them without seeing torn updates.
-      onFrame?.({
-        framePixels: frame.pixels,
-        cumulativePixels: cumulative.slice(),
-        localizations: allLocs.slice(),
-        width: W,
-        height: H,
-        frameIndex: f,
-        totalFrames: params.nFrames,
-        nLocalizationsSoFar: allLocs.length,
-      });
-      // Yield to event loop so React can repaint
-      await new Promise((resolve) => setTimeout(resolve, 0));
+    if (framesCompleted % LIVE_UPDATE_STRIDE === 0) {
+      report();
+      await new Promise((r) => setTimeout(r, 0));
     }
   }
+  report();
 
-  // Final live-update flush — the loop's last 50-frame window may not have
-  // landed on the stride boundary, so push one more snapshot so the UI ends
-  // showing the very last frame and the complete cumulative image.
-  if (lastFramePixels !== null) {
-    onFrame?.({
-      framePixels: lastFramePixels,
-      cumulativePixels: cumulative.slice(),
-      localizations: allLocs.slice(),
-      width: W,
-      height: H,
-      frameIndex: params.nFrames - 1,
-      totalFrames: params.nFrames,
-      nLocalizationsSoFar: allLocs.length,
-    });
-  }
-
-  const finalLocs = params.correctDrift ? correctLocalizationDrift(allLocs, 100) : allLocs;
-
-  const recon = reconstructImage(finalLocs, {
-    fieldSizeNm: groundTruth.fieldSizeNm,
-    outputPixelSizeNm: 10,
-  });
-
-  // Use median, not mean, for measured σ_loc. The localizer is intentionally
-  // permissive — it accepts low-photon candidates so the detection rate stays
-  // high for dim real emitters. That creates a long-tailed distribution of
-  // per-loc σ values (σ ∝ 1/√N, so a spurious 30-photon detection contributes
-  // σ ≈ 10× the true Thompson value). The arithmetic mean is pathologically
-  // sensitive to that tail; the median is robust and matches the Thompson
-  // prediction essentially exactly. This is the same reason ThunderSTORM and
-  // other SMLM packages report robust summary statistics for localization
-  // uncertainty.
-  const measuredSigmaLoc = computeMedianSigmaLoc(finalLocs);
-
-  const predictedSigmaLoc = thompsonSigmaLoc(
-    params.psfSigmaNm,
-    params.photonsPerCycle,
-    params.pixelSizeNm,
-    params.backgroundPerPixel
-  );
-
-  const empirical = computeEmpiricalPrecision(finalLocs, groundTruth);
-  const detectionEfficiency = computeDetectionEfficiency(
-    finalLocs.length,
-    totalOnFrameEvents
-  );
-
-  onProgress?.(1);
+  const final = params.correctDrift ? correctLocalizationDrift(localizations) : localizations;
+  const empirical = computeEmpiricalPrecision(final, groundTruth);
 
   return {
+    params,
     groundTruth,
-    localizations: finalLocs,
-    reconstruction: recon.pixels,
-    reconstructionSize: { width: recon.width, height: recon.height },
-    summedFramesPixels: cumulative,
-    summedFramesSize: { width: W, height: H },
-    measuredSigmaLocNm: measuredSigmaLoc,
-    predictedSigmaLocNm: predictedSigmaLoc,
+    framesCompleted,
+    localizations: final,
+    apparentSigmaLocNm: median(final.map((l) => l.sigmaLocNm)),
     empiricalPrecisionNm: empirical.medianNm,
     empiricalPrecisionP90Nm: empirical.p90Nm,
-    detectionEfficiency,
+    detectionEfficiency: computeDetectionEfficiency(final.length, onEvents),
   };
 }
