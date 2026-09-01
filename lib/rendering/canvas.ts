@@ -1,52 +1,45 @@
 import type { Colormap } from './colormap';
 
-/**
- * Draw a Float32Array pixel buffer to a canvas, auto-scaling to [min, max] and
- * applying a colormap.
- */
+/** Draw a square Float32 buffer to a canvas, contrast-stretched to [min, max]. */
 export function drawPixelBufferToCanvas(
   canvas: HTMLCanvasElement,
   pixels: Float32Array,
-  width: number,
-  height: number,
-  colormap: Colormap,
-  scale?: { min: number; max: number }
+  size: number,
+  colormap: Colormap
 ): void {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
-  canvas.width = width;
-  canvas.height = height;
+  canvas.width = size;
+  canvas.height = size;
 
   let min = Infinity;
   let max = -Infinity;
-  if (scale) {
-    min = scale.min;
-    max = scale.max;
-  } else {
-    for (let i = 0; i < pixels.length; i++) {
-      const v = pixels[i];
-      if (v < min) min = v;
-      if (v > max) max = v;
-    }
+  for (let i = 0; i < pixels.length; i++) {
+    if (pixels[i] < min) min = pixels[i];
+    if (pixels[i] > max) max = pixels[i];
   }
   const range = max - min || 1;
 
-  const imageData = ctx.createImageData(width, height);
+  const img = ctx.createImageData(size, size);
   for (let i = 0; i < pixels.length; i++) {
-    const normalized = (pixels[i] - min) / range;
-    const [r, g, b] = colormap(normalized);
-    imageData.data[i * 4] = r;
-    imageData.data[i * 4 + 1] = g;
-    imageData.data[i * 4 + 2] = b;
-    imageData.data[i * 4 + 3] = 255;
+    const [r, g, b] = colormap((pixels[i] - min) / range);
+    img.data[i * 4] = r;
+    img.data[i * 4 + 1] = g;
+    img.data[i * 4 + 2] = b;
+    img.data[i * 4 + 3] = 255;
   }
-  ctx.putImageData(imageData, 0, 0);
+  ctx.putImageData(img, 0, 0);
 }
 
-/**
- * Read an image file as an HTMLImageElement, then extract its ImageData.
- */
-export async function fileToImageData(file: File, maxSize: number = 512): Promise<ImageData> {
+export function clearCanvas(canvas: HTMLCanvasElement): void {
+  canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+/** Uploaded images are downsampled so their longer side is at most this many pixels. */
+const MAX_UPLOAD_PX = 512;
+
+/** Decode an image file to ImageData, downsampling so the longer side ≤ maxSize. */
+export async function fileToImageData(file: File, maxSize = MAX_UPLOAD_PX): Promise<ImageData> {
   const url = URL.createObjectURL(file);
   try {
     const img = await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -55,15 +48,9 @@ export async function fileToImageData(file: File, maxSize: number = 512): Promis
       i.onerror = reject;
       i.src = url;
     });
-
-    // Downsample if larger than maxSize
-    let w = img.naturalWidth;
-    let h = img.naturalHeight;
-    if (w > maxSize || h > maxSize) {
-      const scale = maxSize / Math.max(w, h);
-      w = Math.round(w * scale);
-      h = Math.round(h * scale);
-    }
+    const scale = Math.min(1, maxSize / Math.max(img.naturalWidth, img.naturalHeight));
+    const w = Math.round(img.naturalWidth * scale);
+    const h = Math.round(img.naturalHeight * scale);
 
     const canvas = document.createElement('canvas');
     canvas.width = w;
