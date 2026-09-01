@@ -1,83 +1,74 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { localizeFrame } from '@/lib/simulator/localization';
 import { renderFrame } from '@/lib/simulator/renderFrame';
-import type { Emitter, SimulationParams } from '@/lib/simulator/types';
-
-const baseParams: SimulationParams = {
-  photonsPerCycle: 5000,
-  backgroundPerPixel: 2,
-  dutyCycle: 0.001,
-  nFrames: 1,
-  driftRateNmPerFrame: 0,
-  correctDrift: false,
-  rigorMode: 'rigorous',
-  pixelSizeNm: 160,
-  psfSigmaNm: 130,
-  fieldSizePx: { width: 64, height: 64 },
-};
+import { thompsonSigmaLoc } from '@/lib/simulator/thompson';
+import { CENTER_NM, distance, nearestTo, params } from './fixtures';
 
 describe('localizeFrame', () => {
-  it('finds a single isolated emitter within a few nm of ground truth', () => {
-    const trueX = (64 * 160) / 2 + 40; // offset from pixel center
-    const trueY = (64 * 160) / 2 - 30;
-    const emitters: Emitter[] = [{ x: trueX, y: trueY }];
-    const frame = renderFrame(emitters, baseParams, 0);
-    const locs = localizeFrame(frame, baseParams);
-
+  it('finds an isolated emitter to within a few nm', () => {
+    const p = params();
+    const x = CENTER_NM + 40;
+    const y = CENTER_NM - 30;
+    const locs = localizeFrame(renderFrame([{ x, y }], p, 0), p);
     expect(locs.length).toBeGreaterThanOrEqual(1);
-    const closest = locs.reduce((best, l) => {
-      const d = Math.hypot(l.x - trueX, l.y - trueY);
-      return d < Math.hypot(best.x - trueX, best.y - trueY) ? l : best;
-    });
-    expect(Math.hypot(closest.x - trueX, closest.y - trueY)).toBeLessThan(15);
+    expect(distance(nearestTo(locs, x, y), x, y)).toBeLessThan(15);
   });
 
-  it('returns empty list for a blank frame', () => {
-    // Force backgroundPerPixel: 0 so the frame is literally all-zeros.
-    // With baseParams.backgroundPerPixel=2, every pixel is Poisson(2), and
-    // ~2.5 peaks per frame on the 60×60 scan area cross the local-max
-    // threshold; a few of those will occasionally have a 7×7 ROI sum above
-    // 20 after background subtraction, producing a flaky spurious detection.
-    const blankParams = { ...baseParams, backgroundPerPixel: 0 };
-    const frame = renderFrame([], blankParams, 0);
-    const locs = localizeFrame(frame, blankParams);
-    expect(locs.length).toBe(0);
+  it('returns nothing for a blank frame', () => {
+    const p = params({ backgroundPerPixel: 0 });
+    expect(localizeFrame(renderFrame([], p, 0), p)).toHaveLength(0);
   });
 
-  it('pedagogical (centroid) mode gives a worse fit than rigorous mode on average', () => {
-    const trueX = (64 * 160) / 2 + 30;
-    const trueY = (64 * 160) / 2 + 30;
-    const emitters: Emitter[] = [{ x: trueX, y: trueY }];
+  it('rejects background noise: no false detections at b = 20 over 20 frames', () => {
+    const p = params({ backgroundPerPixel: 20 });
+    let falsePositives = 0;
+    for (let f = 0; f < 20; f++) falsePositives += localizeFrame(renderFrame([], p, f), p).length;
+    expect(falsePositives).toBe(0);
+  });
 
-    // The detector may return spurious noise peaks above the real emitter in
-    // scan order, so we must find the localization NEAREST to ground truth
-    // (same pattern as Test 1) rather than taking locs[0].
-    const nearest = (locs: { x: number; y: number }[]) =>
-      locs.reduce((best, l) =>
-        Math.hypot(l.x - trueX, l.y - trueY) <
-        Math.hypot(best.x - trueX, best.y - trueY)
-          ? l
-          : best
-      );
+  it('merges two emitters 50 nm apart into one detection at their midpoint', () => {
+    const p = params();
+    const x = CENTER_NM + 40;
+    const locs = localizeFrame(renderFrame([{ x, y: CENTER_NM - 25 }, { x, y: CENTER_NM + 25 }], p, 0), p);
+    const merged = nearestTo(locs, x, CENTER_NM);
+    expect(Math.abs(merged.y - CENTER_NM)).toBeLessThan(15);
+    // The ROI sums both molecules' photons.
+    expect(merged.nPhotons).toBeGreaterThan(1.5 * p.photonsPerCycle);
+    expect(merged.nPhotons).toBeLessThan(2.5 * p.photonsPerCycle);
+  });
 
-    let ped = 0;
-    let rig = 0;
-    const trials = 20;
+  it('resolves two emitters 800 nm apart as separate detections', () => {
+    const p = params();
+    const a = { x: CENTER_NM - 400, y: CENTER_NM };
+    const b = { x: CENTER_NM + 400, y: CENTER_NM };
+    const locs = localizeFrame(renderFrame([a, b], p, 0), p);
+    expect(distance(nearestTo(locs, a.x, a.y), a.x, a.y)).toBeLessThan(15);
+    expect(distance(nearestTo(locs, b.x, b.y), b.x, b.y)).toBeLessThan(15);
+  });
+
+  it('reports a Thompson σ consistent with the photons it counted', () => {
+    const p = params();
+    const [loc] = localizeFrame(renderFrame([{ x: CENTER_NM, y: CENTER_NM }], p, 0), p);
+    expect(loc.sigmaLocNm).toBeCloseTo(thompsonSigmaLoc(p.psfSigmaNm, loc.nPhotons, p.pixelSizeNm, p.backgroundPerPixel), 10);
+  });
+
+  it('the realistic fit is no worse than the centroid on a bright isolated molecule', () => {
+    // At high SNR both estimators are near the Thompson limit (~2 nm), so the
+    // mean errors agree to within noise; this guards against the MLE regressing.
+    const x = CENTER_NM + 30;
+    const y = CENTER_NM + 30;
+    let centroid = 0;
+    let mle = 0;
+    const trials = 60;
     for (let t = 0; t < trials; t++) {
-      const f1 = renderFrame(emitters, { ...baseParams, rigorMode: 'pedagogical' }, t);
-      const f2 = renderFrame(emitters, { ...baseParams, rigorMode: 'rigorous' }, t);
-      const l1 = localizeFrame(f1, { ...baseParams, rigorMode: 'pedagogical' });
-      const l2 = localizeFrame(f2, { ...baseParams, rigorMode: 'rigorous' });
-      if (l1.length > 0) {
-        const n1 = nearest(l1);
-        ped += Math.hypot(n1.x - trueX, n1.y - trueY);
-      }
-      if (l2.length > 0) {
-        const n2 = nearest(l2);
-        rig += Math.hypot(n2.x - trueX, n2.y - trueY);
+      for (const rigorMode of ['pedagogical', 'rigorous'] as const) {
+        const p = params({ rigorMode });
+        const locs = localizeFrame(renderFrame([{ x, y }], p, t), p);
+        const err = distance(nearestTo(locs, x, y), x, y);
+        if (rigorMode === 'pedagogical') centroid += err;
+        else mle += err;
       }
     }
-    // Rigorous should be at least as good on average
-    expect(rig / trials).toBeLessThan(ped / trials + 5);
+    expect(mle / trials).toBeLessThan(centroid / trials + 0.75);
   });
 });

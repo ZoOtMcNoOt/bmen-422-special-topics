@@ -1,45 +1,43 @@
-import { describe, it, expect } from 'vitest';
-import { gaussianPsfPoint, gaussianPsfPixelIntegrated, erf } from '@/lib/simulator/psf';
+import { describe, expect, it } from 'vitest';
+import { erf, gaussianPsfPixelIntegrated, gaussianPsfPoint } from '@/lib/simulator/psf';
 
 describe('erf', () => {
-  it('erf(0) = 0', () => {
-    expect(erf(0)).toBeCloseTo(0, 6);
-  });
-  it('erf(1) ≈ 0.8427', () => {
-    expect(erf(1)).toBeCloseTo(0.8427, 3);
-  });
-  it('erf(-1) ≈ -0.8427', () => {
-    expect(erf(-1)).toBeCloseTo(-0.8427, 3);
+  it.each([
+    [0, 0],
+    [0.5, 0.5205],
+    [1, 0.8427],
+    [-1, -0.8427],
+    [2, 0.9953],
+  ])('erf(%d) ≈ %d', (x, expected) => {
+    expect(erf(x)).toBeCloseTo(expected, 3);
   });
 });
 
 describe('gaussianPsfPoint', () => {
-  it('peak value at origin equals 1/(2π σ²)', () => {
-    const sigma = 130;
-    const peak = gaussianPsfPoint(0, 0, sigma);
-    expect(peak).toBeCloseTo(1 / (2 * Math.PI * sigma * sigma), 10);
+  it('peaks at 1/(2πσ²)', () => {
+    expect(gaussianPsfPoint(0, 0, 130)).toBeCloseTo(1 / (2 * Math.PI * 130 * 130), 10);
   });
-
-  it('falls off at 2 sigma', () => {
-    const sigma = 130;
-    const peak = gaussianPsfPoint(0, 0, sigma);
-    const at2Sigma = gaussianPsfPoint(2 * sigma, 0, sigma);
-    expect(at2Sigma / peak).toBeCloseTo(Math.exp(-2), 5);
+  it('falls to e⁻² at 2σ', () => {
+    expect(gaussianPsfPoint(260, 0, 130) / gaussianPsfPoint(0, 0, 130)).toBeCloseTo(Math.exp(-2), 6);
   });
 });
 
 describe('gaussianPsfPixelIntegrated', () => {
-  it('integrating over a very large region containing the center gives ~1', () => {
-    const sigma = 130;
-    // Integrate from -2000 to 2000 nm on both axes (way outside the PSF)
-    const integral = gaussianPsfPixelIntegrated(-2000, 2000, -2000, 2000, 0, 0, sigma);
-    expect(integral).toBeCloseTo(1, 4);
+  it('integrates to 1 over a region far larger than the PSF', () => {
+    expect(gaussianPsfPixelIntegrated(-2000, 2000, -2000, 2000, 0, 0, 130)).toBeCloseTo(1, 4);
   });
-
-  it('symmetry: pixel centered on emitter equals four quadrants combined', () => {
-    const sigma = 130;
-    const full = gaussianPsfPixelIntegrated(-80, 80, -80, 80, 0, 0, sigma);
-    const quad = gaussianPsfPixelIntegrated(0, 80, 0, 80, 0, 0, sigma);
-    expect(full).toBeCloseTo(4 * quad, 6);
+  it('is symmetric: a centred pixel equals four quadrants', () => {
+    const full = gaussianPsfPixelIntegrated(-80, 80, -80, 80, 0, 0, 130);
+    const quadrant = gaussianPsfPixelIntegrated(0, 80, 0, 80, 0, 0, 130);
+    expect(full).toBeCloseTo(4 * quadrant, 8);
+  });
+  it('sums to 1 across a grid of adjacent pixels', () => {
+    let total = 0;
+    for (let x = -10; x < 10; x++) {
+      for (let y = -10; y < 10; y++) {
+        total += gaussianPsfPixelIntegrated(x * 160, (x + 1) * 160, y * 160, (y + 1) * 160, 37, -21, 130);
+      }
+    }
+    expect(total).toBeCloseTo(1, 6);
   });
 });

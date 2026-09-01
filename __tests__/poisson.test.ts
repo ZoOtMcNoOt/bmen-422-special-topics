@@ -1,36 +1,39 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { samplePoisson } from '@/lib/simulator/poisson';
 
+function moments(lambda: number, n: number) {
+  let s = 0;
+  let s2 = 0;
+  for (let i = 0; i < n; i++) {
+    const v = samplePoisson(lambda);
+    s += v;
+    s2 += v * v;
+  }
+  const mean = s / n;
+  return { mean, variance: s2 / n - mean * mean };
+}
+
 describe('samplePoisson', () => {
-  it('has correct mean at lambda=10 over 10000 samples', () => {
-    const n = 10000;
-    let sum = 0;
-    for (let i = 0; i < n; i++) sum += samplePoisson(10);
-    const mean = sum / n;
-    expect(mean).toBeGreaterThan(9.7);
-    expect(mean).toBeLessThan(10.3);
-  });
-
-  it('has correct variance at lambda=10 (variance = mean for Poisson)', () => {
-    const n = 10000;
-    const samples: number[] = [];
-    for (let i = 0; i < n; i++) samples.push(samplePoisson(10));
-    const mean = samples.reduce((a, b) => a + b, 0) / n;
-    const variance = samples.reduce((a, b) => a + (b - mean) ** 2, 0) / n;
-    expect(variance).toBeGreaterThan(9);
-    expect(variance).toBeLessThan(11);
-  });
-
-  it('handles large lambda via Gaussian approximation', () => {
-    const n = 5000;
-    let sum = 0;
-    for (let i = 0; i < n; i++) sum += samplePoisson(1000);
-    const mean = sum / n;
-    expect(mean).toBeGreaterThan(990);
-    expect(mean).toBeLessThan(1010);
-  });
-
-  it('returns 0 for lambda = 0', () => {
+  it('returns 0 for λ ≤ 0', () => {
     expect(samplePoisson(0)).toBe(0);
+    expect(samplePoisson(-1)).toBe(0);
+  });
+
+  it('has mean ≈ variance ≈ λ in the exact (Knuth) regime', () => {
+    const { mean, variance } = moments(10, 20_000);
+    expect(Math.abs(mean - 10)).toBeLessThan(0.25); // SE is 0.022
+    expect(variance).toBeGreaterThan(9.3);
+    expect(variance).toBeLessThan(10.7);
+  });
+
+  it('has mean ≈ λ in the normal-approximation regime', () => {
+    expect(Math.abs(moments(1000, 5000).mean - 1000)).toBeLessThan(5); // SE is 0.45
+  });
+
+  it('is reproducible with an injected RNG', () => {
+    const lcg = (seed: number) => () => (seed = (seed * 1664525 + 1013904223) % 2 ** 32) / 2 ** 32;
+    const a = Array.from({ length: 50 }, () => samplePoisson(12, lcg(7)));
+    const b = Array.from({ length: 50 }, () => samplePoisson(12, lcg(7)));
+    expect(a).toEqual(b);
   });
 });

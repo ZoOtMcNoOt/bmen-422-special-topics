@@ -1,58 +1,30 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { renderFrame } from '@/lib/simulator/renderFrame';
-import type { Emitter, SimulationParams } from '@/lib/simulator/types';
-
-const baseParams: SimulationParams = {
-  photonsPerCycle: 3000,
-  backgroundPerPixel: 0,
-  dutyCycle: 0.001,
-  nFrames: 1,
-  driftRateNmPerFrame: 0,
-  correctDrift: false,
-  rigorMode: 'rigorous',
-  pixelSizeNm: 160,
-  psfSigmaNm: 130,
-  fieldSizePx: { width: 64, height: 64 },
-};
+import { CENTER_NM, argmax, params, sum } from './fixtures';
 
 describe('renderFrame', () => {
-  it('empty emitters list produces a pure background frame', () => {
-    const frame = renderFrame([], baseParams, 0);
-    expect(frame.pixels.length).toBe(64 * 64);
-    for (let i = 0; i < frame.pixels.length; i++) {
-      expect(frame.pixels[i]).toBe(0);
-    }
+  it('is all zeros with no emitters and no background', () => {
+    const frame = renderFrame([], params({ backgroundPerPixel: 0 }), 0);
+    expect(frame.pixels).toHaveLength(64 * 64);
+    expect(sum(frame.pixels)).toBe(0);
   });
 
-  it('brightest pixel lands at the emitter center', () => {
-    const fieldCenterNm = (64 * 160) / 2;
-    const emitters: Emitter[] = [{ x: fieldCenterNm, y: fieldCenterNm }];
-    const frame = renderFrame(emitters, { ...baseParams, backgroundPerPixel: 0 }, 0);
-
-    // Center pixel should have the highest count
-    let maxVal = 0;
-    let maxIdx = 0;
-    for (let i = 0; i < frame.pixels.length; i++) {
-      if (frame.pixels[i] > maxVal) {
-        maxVal = frame.pixels[i];
-        maxIdx = i;
-      }
-    }
-    const cx = maxIdx % 64;
-    const cy = Math.floor(maxIdx / 64);
-    expect(Math.abs(cx - 32)).toBeLessThanOrEqual(1);
-    expect(Math.abs(cy - 32)).toBeLessThanOrEqual(1);
+  it('puts the brightest pixel under the emitter', () => {
+    const frame = renderFrame([{ x: CENTER_NM + 80, y: CENTER_NM + 80 }], params({ backgroundPerPixel: 0 }), 0);
+    const peak = argmax(frame.pixels);
+    expect(peak % 64).toBe(Math.floor((CENTER_NM + 80) / 160));
+    expect(Math.floor(peak / 64)).toBe(Math.floor((CENTER_NM + 80) / 160));
   });
 
-  it('total photons in frame approximately equals N (shot noise)', () => {
-    const fieldCenterNm = (64 * 160) / 2;
-    const emitters: Emitter[] = [{ x: fieldCenterNm, y: fieldCenterNm }];
-    const params = { ...baseParams, photonsPerCycle: 5000, backgroundPerPixel: 0 };
-    const frame = renderFrame(emitters, params, 0);
-    let total = 0;
-    for (let i = 0; i < frame.pixels.length; i++) total += frame.pixels[i];
-    // Should be near 5000, with Poisson sqrt-N noise
-    expect(total).toBeGreaterThan(4600);
-    expect(total).toBeLessThan(5400);
+  it.each(['rigorous', 'pedagogical'] as const)('conserves photons in %s mode (total ≈ N)', (rigorMode) => {
+    const frame = renderFrame([{ x: CENTER_NM + 37, y: CENTER_NM - 21 }], params({ backgroundPerPixel: 0, rigorMode }), 0);
+    // Poisson: 5000 ± 71; ±400 is 5.7σ.
+    expect(sum(frame.pixels)).toBeGreaterThan(4600);
+    expect(sum(frame.pixels)).toBeLessThan(5400);
+  });
+
+  it('adds b photons per pixel of background on average', () => {
+    const frame = renderFrame([], params({ backgroundPerPixel: 20 }), 0);
+    expect(sum(frame.pixels) / frame.pixels.length).toBeCloseTo(20, 0); // ±0.5; SE is 0.07
   });
 });
