@@ -1,36 +1,36 @@
 'use client';
 
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
+import { PRESETS, PRESET_KINDS, type PresetKind } from '@/lib/presets';
 import { PhotoUpload } from './PhotoUpload';
 
-export type PresetPickerProps = {
-  value: 'two-lines' | 'ring' | 'actin' | 'image';
-  onValueChange: (kind: 'two-lines' | 'ring' | 'actin' | 'image') => void;
+type Props = {
+  value: PresetKind;
+  onChange: (kind: PresetKind) => void;
   onImageLoaded: (imageData: ImageData) => void;
+  disabled: boolean;
 };
 
-export function PresetPicker({ value, onValueChange, onImageLoaded }: PresetPickerProps) {
+export function PresetPicker({ value, onChange, onImageLoaded, disabled }: Props) {
   return (
-    <Tabs value={value} onValueChange={(v) => onValueChange(v as PresetPickerProps['value'])}>
-      <TabsList className="grid w-full grid-cols-4">
-        <TabsTrigger value="two-lines">Two Lines</TabsTrigger>
-        <TabsTrigger value="ring">Ring</TabsTrigger>
-        <TabsTrigger value="actin">Actin</TabsTrigger>
-        <TabsTrigger value="image">Upload Photo</TabsTrigger>
-      </TabsList>
-      <TabsContent value="two-lines" className="text-sm text-slate-400 p-4">
-        Two parallel emitter lines at 50 nm separation — the classic resolution test.
-      </TabsContent>
-      <TabsContent value="ring" className="text-sm text-slate-400 p-4">
-        A 60 nm hollow ring — the apparent diameter of an immunolabelled
-        microtubule cross-section (native 25 nm + antibody stack).
-      </TabsContent>
-      <TabsContent value="actin" className="text-sm text-slate-400 p-4">
-        Periodic actin-spectrin scaffold with ~190 nm spacing — recreating Xu et al. 2013.
-      </TabsContent>
-      <TabsContent value="image">
-        <PhotoUpload onImageLoaded={onImageLoaded} />
-      </TabsContent>
-    </Tabs>
+    <section className="flex flex-col gap-3">
+      <h2 className="text-sm font-semibold text-foreground">Sample</h2>
+      <div role="radiogroup" aria-label="Sample" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {PRESET_KINDS.map((kind) => (
+          <Button
+            key={kind}
+            role="radio"
+            aria-checked={kind === value}
+            variant={kind === value ? 'default' : 'outline'}
+            disabled={disabled}
+            onClick={() => onChange(kind)}
+          >
+            {PRESETS[kind].label}
+          </Button>
+        ))}
+      </div>
+      <p className="text-xs text-muted-foreground">{PRESETS[value].blurb}</p>
+      {value === 'image' && <PhotoUpload onImageLoaded={onImageLoaded} disabled={disabled} />}
+    </section>
   );
 }

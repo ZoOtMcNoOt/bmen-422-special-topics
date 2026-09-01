@@ -5,37 +5,46 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { fileToImageData } from '@/lib/rendering/canvas';
 
-export type PhotoUploadProps = {
-  onImageLoaded: (imageData: ImageData) => void;
-};
+type Props = { onImageLoaded: (imageData: ImageData) => void; disabled: boolean };
 
-export function PhotoUpload({ onImageLoaded }: PhotoUploadProps) {
-  const [fileName, setFileName] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+/** True if any pixel has non-zero luminance — the sampler needs something to sample. */
+function hasBrightPixels(img: ImageData): boolean {
+  for (let i = 0; i < img.data.length; i += 4) {
+    if (img.data[i] || img.data[i + 1] || img.data[i + 2]) return true;
+  }
+  return false;
+}
+
+export function PhotoUpload({ onImageLoaded, disabled }: Props) {
+  const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    setError(null);
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) {
-      setError('Please upload a PNG, JPEG, or WebP image');
+      setStatus({ ok: false, text: 'Please choose a PNG, JPEG, or WebP image.' });
       return;
     }
     try {
-      const imageData = await fileToImageData(file, 512);
-      setFileName(file.name);
-      onImageLoaded(imageData);
+      const img = await fileToImageData(file);
+      if (!hasBrightPixels(img)) {
+        setStatus({ ok: false, text: 'That image is completely black — there is nothing to label.' });
+        return;
+      }
+      onImageLoaded(img);
+      setStatus({ ok: true, text: `Loaded ${file.name}` });
     } catch {
-      setError('Failed to load image');
+      setStatus({ ok: false, text: 'That image could not be read.' });
     }
   };
 
   return (
-    <div className="flex flex-col gap-2 p-4">
-      <Label htmlFor="photo-upload">Upload an image</Label>
-      <Input id="photo-upload" type="file" accept="image/*" onChange={handleFile} />
-      {fileName && <div className="text-xs text-slate-400">Loaded: {fileName}</div>}
-      {error && <div className="text-xs text-red-400">{error}</div>}
+    <div className="flex flex-col gap-2">
+      <Label htmlFor="photo-upload" className="text-sm text-foreground">Image file</Label>
+      <Input id="photo-upload" type="file" accept="image/*" onChange={handleFile} disabled={disabled} />
+      {status && (
+        <p className={`text-xs ${status.ok ? 'text-muted-foreground' : 'text-destructive'}`}>{status.text}</p>
+      )}
     </div>
   );
 }

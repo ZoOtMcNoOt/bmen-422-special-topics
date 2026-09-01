@@ -1,90 +1,67 @@
 'use client';
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, type ReactNode } from 'react';
 import * as echarts from 'echarts/core';
-import { LineChart, ScatterChart } from 'echarts/charts';
-import {
-  GridComponent,
-  TooltipComponent,
-  LegendComponent,
-  MarkLineComponent,
-} from 'echarts/components';
+import { LineChart, ScatterChart, type ScatterSeriesOption } from 'echarts/charts';
+import { GridComponent, LegendComponent, MarkLineComponent, TooltipComponent } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
+import { MAX_PHOTONS_PER_CYCLE } from '@/lib/simulator/defaults';
 import { thompsonSigmaLoc } from '@/lib/simulator/thompson';
+import type { SimulationParams, SimulationResult } from '@/lib/simulator/types';
 
-// Register the subset of ECharts we actually use. This keeps the bundle
-// size bounded (~180 kB vs ~900 kB for the full build).
-echarts.use([
-  LineChart,
-  ScatterChart,
-  GridComponent,
-  TooltipComponent,
-  LegendComponent,
-  MarkLineComponent,
-  CanvasRenderer,
-]);
+// Register only the ECharts modules used.
+echarts.use([LineChart, ScatterChart, GridComponent, LegendComponent, MarkLineComponent, TooltipComponent, CanvasRenderer]);
 
-export type ThompsonPlotProps = {
-  psfSigmaNm: number;
-  pixelSizeNm: number;
-  backgroundPerPixel: number;
-  currentPhotons: number;
-  measuredSigmaLocNm: number | null;
-  // Optional ground-truth-referenced metrics. When provided, a third point
-  // and a stats column for each are rendered.
-  empiricalPrecisionNm?: number | null;
-  detectionEfficiency?: number | null;
+type Props = {
+  /** Live parameters — draw the theory curve for these. */
+  params: SimulationParams;
+  /** Last result — its points are plotted at the photon count it was acquired with. */
+  result: SimulationResult | null;
 };
 
 const N_MIN = 100;
-const N_MAX = 10000;
+const N_MAX = MAX_PHOTONS_PER_CYCLE;
+const SIGMA_MIN_NM = 0.5;
+const SIGMA_MAX_NM = 50;
 const CURVE_STEPS = 120;
 
-export function ThompsonPlot({
-  psfSigmaNm,
-  pixelSizeNm,
-  backgroundPerPixel,
-  currentPhotons,
-  measuredSigmaLocNm,
-  empiricalPrecisionNm = null,
-  detectionEfficiency = null,
-}: ThompsonPlotProps) {
+// ECharts can't read CSS variables; these mirror the Tailwind palette
+// (`storm` orange is also defined as --color-storm in globals.css).
+const C = {
+  text: '#cbd5e1',
+  muted: '#94a3b8',
+  axis: '#475569',
+  grid: '#1e293b',
+  theory: '#f97316',
+  fitter: '#22d3ee',
+  measured: '#a78bfa',
+  floor: '#64748b',
+};
+
+export function ThompsonPlot({ params, result }: Props) {
   const divRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<echarts.EChartsType | null>(null);
 
-  // Precompute Thompson curve + shot-noise asymptote at log-spaced N values.
+  const { psfSigmaNm, pixelSizeNm, backgroundPerPixel, photonsPerCycle } = params;
+
   const curves = useMemo(() => {
-    const logMin = Math.log10(N_MIN);
-    const logMax = Math.log10(N_MAX);
-    const thompson: [number, number][] = [];
-    const shot: [number, number][] = [];
+    const theory: [number, number][] = [];
+    const floor: [number, number][] = [];
     for (let i = 0; i <= CURVE_STEPS; i++) {
-      const lx = logMin + ((logMax - logMin) * i) / CURVE_STEPS;
-      const N = Math.pow(10, lx);
-      thompson.push([N, thompsonSigmaLoc(psfSigmaNm, N, pixelSizeNm, backgroundPerPixel)]);
-      shot.push([N, psfSigmaNm / Math.sqrt(N)]);
+      const N = 10 ** (Math.log10(N_MIN) + ((Math.log10(N_MAX) - Math.log10(N_MIN)) * i) / CURVE_STEPS);
+      theory.push([N, thompsonSigmaLoc(psfSigmaNm, N, pixelSizeNm, backgroundPerPixel)]);
+      floor.push([N, psfSigmaNm / Math.sqrt(N)]);
     }
-    return { thompson, shot };
+    return { theory, floor };
   }, [psfSigmaNm, pixelSizeNm, backgroundPerPixel]);
 
-  const currentPred = useMemo(
-    () => thompsonSigmaLoc(psfSigmaNm, currentPhotons, pixelSizeNm, backgroundPerPixel),
-    [psfSigmaNm, currentPhotons, pixelSizeNm, backgroundPerPixel]
-  );
-
-  // Init + dispose lifecycle. Re-running `setOption` on prop changes happens
-  // in the other effect below.
   useEffect(() => {
     if (!divRef.current) return;
     const chart = echarts.init(divRef.current, null, { renderer: 'canvas' });
     chartRef.current = chart;
-    const onResize = () => chart.resize();
-    window.addEventListener('resize', onResize);
-    // Resize when the container itself changes (e.g. parent column reflows)
-    const ro = new ResizeObserver(onResize);
+    const ro = new ResizeObserver(() => chart.resize());
     ro.observe(divRef.current);
     return () => {
-      window.removeEventListener('resize', onResize);
       ro.disconnect();
       chart.dispose();
       chartRef.current = null;
@@ -95,256 +72,140 @@ export function ThompsonPlot({
     const chart = chartRef.current;
     if (!chart) return;
 
-    const hasMeasured = measuredSigmaLocNm !== null && measuredSigmaLocNm > 0;
-    const apparentRatio = hasMeasured
-      ? (measuredSigmaLocNm as number) / currentPred
-      : null;
-    const hasEmpirical =
-      empiricalPrecisionNm !== null &&
-      empiricalPrecisionNm !== undefined &&
-      empiricalPrecisionNm > 0;
-    const empiricalRatio = hasEmpirical
-      ? (empiricalPrecisionNm as number) / currentPred
-      : null;
-
-    chart.setOption({
-      // `notMerge` so the Measured series disappears cleanly on reset rather
-      // than lingering with stale data.
-      animation: true,
-      animationDuration: 250,
-      backgroundColor: 'transparent',
-      textStyle: { fontFamily: 'ui-monospace, monospace' },
-      grid: { left: 58, right: 14, top: 30, bottom: 44 },
-      legend: {
-        top: 2,
-        right: 8,
-        textStyle: { color: '#cbd5e1', fontSize: 11 },
-        itemWidth: 18,
-        itemHeight: 10,
-        icon: 'roundRect',
+    const predicted = thompsonSigmaLoc(psfSigmaNm, photonsPerCycle, pixelSizeNm, backgroundPerPixel);
+    const runN = result?.params.photonsPerCycle;
+    const points: ScatterSeriesOption[] = [
+      {
+        name: 'Theory at current brightness',
+        type: 'scatter',
+        symbolSize: 11,
+        data: [[photonsPerCycle, predicted]],
+        itemStyle: { color: C.theory, borderColor: '#fff', borderWidth: 1.5 },
+        z: 5,
       },
-      tooltip: {
-        trigger: 'axis',
-        backgroundColor: 'rgba(15, 23, 42, 0.95)',
-        borderColor: '#334155',
-        textStyle: { color: '#e2e8f0', fontSize: 12 },
-        axisPointer: {
-          type: 'cross',
-          snap: true,
-          label: {
-            backgroundColor: '#1e293b',
-            color: '#e2e8f0',
-            fontSize: 10,
-            formatter: (p: { axisDimension: string; value: number }) =>
-              p.axisDimension === 'x'
-                ? `N = ${Math.round(p.value).toLocaleString()}`
-                : `σ = ${p.value.toFixed(2)} nm`,
-          },
-        },
-        formatter: (params: unknown) => {
-          const arr = Array.isArray(params) ? params : [params];
-          if (arr.length === 0) return '';
-          const first = arr[0] as { data: [number, number] };
-          const n = first.data[0];
-          const rows = arr
-            .map((s) => {
-              const p = s as { seriesName: string; color: string; data: [number, number] };
-              return `<span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:50%;margin-right:6px"></span>${p.seriesName}: <b>${p.data[1].toFixed(2)} nm</b>`;
-            })
-            .join('<br/>');
-          return `<div style="font-family:ui-monospace,monospace;font-size:12px"><b>N = ${Math.round(n).toLocaleString()}</b><br/>${rows}</div>`;
-        },
-      },
-      xAxis: {
-        type: 'log',
-        logBase: 10,
-        min: N_MIN,
-        max: N_MAX,
-        name: 'Photons per molecule (N)',
-        nameLocation: 'middle',
-        nameGap: 26,
-        nameTextStyle: { color: '#94a3b8', fontSize: 11, fontWeight: 500 },
-        axisLine: { lineStyle: { color: '#475569' } },
-        axisTick: { lineStyle: { color: '#475569' } },
-        axisLabel: {
-          color: '#94a3b8',
-          fontSize: 10,
-          formatter: (v: number) => (v >= 1000 ? `${v / 1000}k` : String(v)),
-        },
-        splitLine: { show: true, lineStyle: { color: '#1e293b' } },
-        minorTick: { show: true, splitNumber: 5, lineStyle: { color: '#334155' } },
-        minorSplitLine: { show: true, lineStyle: { color: '#0f172a' } },
-      },
-      yAxis: {
-        type: 'log',
-        logBase: 10,
-        min: 0.5,
-        max: 50,
-        name: 'σ_loc  (nm)',
-        nameLocation: 'middle',
-        nameGap: 40,
-        nameRotate: 90,
-        nameTextStyle: { color: '#94a3b8', fontSize: 11, fontWeight: 500 },
-        axisLine: { lineStyle: { color: '#475569' } },
-        axisTick: { lineStyle: { color: '#475569' } },
-        axisLabel: {
-          color: '#94a3b8',
-          fontSize: 10,
-          formatter: (v: number) => (v < 1 ? v.toFixed(1) : String(v)),
-        },
-        splitLine: { show: true, lineStyle: { color: '#1e293b' } },
-        minorTick: { show: true, splitNumber: 5, lineStyle: { color: '#334155' } },
-        minorSplitLine: { show: true, lineStyle: { color: '#0f172a' } },
-      },
-      series: [
+    ];
+    if (result && runN) {
+      points.push(
         {
-          name: 'Shot-noise limit  σ/√N',
-          type: 'line',
-          showSymbol: false,
-          data: curves.shot,
-          lineStyle: { color: '#64748b', width: 1, type: 'dashed' },
-          z: 1,
-        },
-        {
-          name: 'Thompson σ_loc(N)',
-          type: 'line',
-          showSymbol: false,
-          smooth: false,
-          data: curves.thompson,
-          lineStyle: { color: '#f97316', width: 2.5 },
-          z: 2,
-          markLine: {
-            silent: true,
-            symbol: 'none',
-            lineStyle: { color: '#475569', type: 'dotted', width: 1 },
-            label: {
-              color: '#94a3b8',
-              fontSize: 10,
-              formatter: `N = ${currentPhotons.toLocaleString()}`,
-              position: 'insideEndTop',
-            },
-            data: [{ xAxis: currentPhotons }],
-          },
-        },
-        {
-          name: 'Predicted (current N)',
+          name: "Fitter's own estimate",
           type: 'scatter',
-          symbol: 'circle',
-          symbolSize: 11,
-          data: [[currentPhotons, currentPred]],
-          itemStyle: { color: '#f97316', borderColor: '#fef3c7', borderWidth: 1.5 },
-          z: 5,
+          symbol: 'diamond',
+          symbolSize: 13,
+          data: [[runN, result.apparentSigmaLocNm]],
+          itemStyle: { color: C.fitter, borderColor: '#fff', borderWidth: 1.5 },
+          z: 6,
         },
-        ...(hasMeasured
-          ? [
-              {
-                name: `Apparent σ (per-loc Thompson)${
-                  apparentRatio != null ? `  ·  ${apparentRatio.toFixed(2)}×` : ''
-                }`,
-                type: 'scatter' as const,
-                symbol: 'diamond',
-                symbolSize: 13,
-                data: [[currentPhotons, measuredSigmaLocNm as number]],
-                itemStyle: {
-                  color: '#22d3ee',
-                  borderColor: '#cffafe',
-                  borderWidth: 1.5,
-                },
-                z: 6,
-              },
-            ]
-          : []),
-        ...(hasEmpirical
-          ? [
-              {
-                name: `Empirical (vs. ground truth)${
-                  empiricalRatio != null ? `  ·  ${empiricalRatio.toFixed(2)}×` : ''
-                }`,
-                type: 'scatter' as const,
-                symbol: 'triangle',
-                symbolSize: 13,
-                data: [[currentPhotons, empiricalPrecisionNm as number]],
-                itemStyle: {
-                  color: '#a78bfa',
-                  borderColor: '#ede9fe',
-                  borderWidth: 1.5,
-                },
-                z: 7,
-              },
-            ]
-          : []),
-      ],
-    }, { notMerge: true });
-  }, [
-    curves,
-    currentPhotons,
-    currentPred,
-    measuredSigmaLocNm,
-    empiricalPrecisionNm,
-  ]);
+        {
+          name: 'Measured vs. true positions',
+          type: 'scatter',
+          symbol: 'triangle',
+          symbolSize: 13,
+          data: [[runN, result.empiricalPrecisionNm]],
+          itemStyle: { color: C.measured, borderColor: '#fff', borderWidth: 1.5 },
+          z: 7,
+        }
+      );
+    }
+
+    chart.setOption(
+      {
+        animationDuration: 250,
+        backgroundColor: 'transparent',
+        textStyle: { fontFamily: 'var(--font-geist-mono), ui-monospace, monospace' },
+        grid: { left: 60, right: 16, top: 40, bottom: 48 },
+        legend: { top: 0, left: 0, textStyle: { color: C.text, fontSize: 12 }, itemWidth: 14, itemHeight: 10 },
+        tooltip: {
+          trigger: 'axis',
+          backgroundColor: 'rgba(15,23,42,0.95)',
+          borderColor: C.axis,
+          textStyle: { color: C.text, fontSize: 12 },
+          valueFormatter: (v: unknown) => `${Number(v).toFixed(2)} nm`,
+          axisPointer: { type: 'cross', label: { backgroundColor: C.grid, color: C.text, fontSize: 12 } },
+        },
+        xAxis: {
+          type: 'log',
+          min: N_MIN,
+          max: N_MAX,
+          name: 'Photons per blink',
+          nameLocation: 'middle',
+          nameGap: 30,
+          nameTextStyle: { color: C.muted, fontSize: 12 },
+          axisLine: { lineStyle: { color: C.axis } },
+          axisLabel: { color: C.muted, fontSize: 12, formatter: (v: number) => (v >= 1000 ? `${v / 1000}k` : String(v)) },
+          splitLine: { lineStyle: { color: C.grid } },
+          minorSplitLine: { show: true, lineStyle: { color: '#0f172a' } },
+        },
+        yAxis: {
+          type: 'log',
+          min: SIGMA_MIN_NM,
+          max: SIGMA_MAX_NM,
+          name: 'Precision (nm)',
+          nameLocation: 'middle',
+          nameGap: 42,
+          nameTextStyle: { color: C.muted, fontSize: 12 },
+          axisLine: { lineStyle: { color: C.axis } },
+          axisLabel: { color: C.muted, fontSize: 12 },
+          splitLine: { lineStyle: { color: C.grid } },
+          minorSplitLine: { show: true, lineStyle: { color: '#0f172a' } },
+        },
+        series: [
+          {
+            name: 'Best possible (no background)',
+            type: 'line',
+            showSymbol: false,
+            data: curves.floor,
+            lineStyle: { color: C.floor, width: 1, type: 'dashed' },
+            z: 1,
+          },
+          {
+            name: 'Theory',
+            type: 'line',
+            showSymbol: false,
+            data: curves.theory,
+            lineStyle: { color: C.theory, width: 2.5 },
+            z: 2,
+            markLine: {
+              silent: true,
+              symbol: 'none',
+              lineStyle: { color: C.axis, type: 'dotted' },
+              label: { show: false },
+              data: [{ xAxis: photonsPerCycle }],
+            },
+          },
+          ...points,
+        ],
+      },
+      { notMerge: true } // so a cleared result's points disappear
+    );
+  }, [curves, photonsPerCycle, psfSigmaNm, pixelSizeNm, backgroundPerPixel, result]);
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-slate-800 bg-slate-900/50 p-4">
-      <div className="flex items-baseline justify-between gap-4">
-        <div className="text-sm font-medium text-slate-300">Localization precision</div>
-        <div className="text-[10px] text-slate-500 tabular-nums">
-          σ_psf={psfSigmaNm}nm · a={pixelSizeNm}nm · b={backgroundPerPixel}
-        </div>
-      </div>
-      <div ref={divRef} className="h-[280px] w-full" />
-      <div className="grid grid-cols-4 gap-3 border-t border-slate-800 pt-3 text-xs">
-        <Stat
-          label="Thompson"
-          help="σ_loc(N) predicted by the Thompson 2002 formula"
-          value={`${currentPred.toFixed(2)} nm`}
-          valueClass="text-orange-400"
-        />
-        <Stat
-          label="Apparent σ"
-          help="median of per-loc Thompson(N̂) — biased by crowding"
-          value={measuredSigmaLocNm !== null ? `${measuredSigmaLocNm.toFixed(2)} nm` : '—'}
-          valueClass="text-cyan-400"
-        />
-        <Stat
-          label="Empirical"
-          help="median distance to the nearest true emitter (what the simulator actually got)"
-          value={
-            empiricalPrecisionNm !== null && empiricalPrecisionNm !== undefined
-              ? `${empiricalPrecisionNm.toFixed(2)} nm`
-              : '—'
-          }
-          valueClass="text-violet-400"
-        />
-        <Stat
-          label="Detection η"
-          help="localizations per ON-emitter-frame event (1.0 = every blink detected)"
-          value={
-            detectionEfficiency !== null && detectionEfficiency !== undefined
-              ? `${(detectionEfficiency * 100).toFixed(0)}%`
-              : '—'
-          }
-          valueClass="text-slate-200"
-        />
-      </div>
+    <div className="flex flex-col gap-3">
+      <div ref={divRef} className="h-72 w-full" />
+      <dl className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-3">
+        <Term color={C.theory} name="Theory">
+          The best precision an isolated molecule with this many photons can give (Thompson, Larson &amp; Webb, 2002).
+          The dashed line is the same with zero background.
+        </Term>
+        <Term color={C.fitter} name="Fitter's own estimate">
+          The same formula applied to each detected blink. Optimistic when two molecules overlap — the fitter counts their photons as one.
+        </Term>
+        <Term color={C.measured} name="Measured vs. truth">
+          Median distance from each localization to the nearest real molecule. This is the honest number used in the headline.
+        </Term>
+      </dl>
     </div>
   );
 }
 
-function Stat({
-  label,
-  value,
-  help,
-  valueClass,
-}: {
-  label: string;
-  value: string;
-  help: string;
-  valueClass: string;
-}) {
+function Term({ color, name, children }: { color: string; name: string; children: ReactNode }) {
   return (
-    <div className="flex flex-col" title={help}>
-      <span className="text-slate-500">{label}</span>
-      <span className={`font-mono text-sm ${valueClass}`}>{value}</span>
+    <div>
+      <dt className="flex items-center gap-1.5 font-medium text-foreground">
+        <span className="inline-block size-2 rounded-full" style={{ background: color }} />
+        {name}
+      </dt>
+      <dd className="mt-0.5 leading-snug text-muted-foreground">{children}</dd>
     </div>
   );
 }
