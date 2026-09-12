@@ -1,0 +1,12 @@
+{
+  "name": "storm-lab-browser-checks",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/test_web.mjs",
+    "check": "node --check storm_slides/web/app.js && node --check storm_slides/web/renderer.js && node --check storm_slides/web/export.js"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
