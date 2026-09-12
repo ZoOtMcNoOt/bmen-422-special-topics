@@ -410,9 +410,16 @@ export default function Page() {
         )}
         <p className="mb-5 text-xs text-muted-foreground">
           Point markers have a fixed display size. Camera brightness uses one
-          fixed scale for the acquisition; widefield shows the raw mean of all
-          acquired frames, normalized separately. Camera images retain stage
-          drift.
+          fixed scale for the acquisition. The camera&apos;s all-frame mean averages
+          the raw acquired frames and is normalized separately. Both retain
+          stage drift.
+        </p>
+        <p className="mb-5 text-xs text-muted-foreground">
+          The conventional view sums the same Gaussian PSF over every emitter,
+          with all emitters on. It shows the ideal fluorescence image before
+          camera sampling, without noise, background, or drift. Its brightness is
+          normalized independently. All three views show the same physical crop;
+          colors indicate intensity or position, not emission wavelength.
         </p>
         {notesOpen && <ThompsonPlot params={displayedParams} result={result} />}
         <p className="mt-5 text-xs text-muted-foreground">

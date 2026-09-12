@@ -27,7 +27,11 @@ The sample icons, controls, playback, model notes, CSV export, and scaled PNG ex
 - Drift correction subtracts the exact simulated motion. It demonstrates ideal known correction, not an estimator from measured frames.
 - Thompson localization precision is an approximation, with background variance consistent with the Poisson camera model. It is not measured image resolution.
 
-The interface preserves the original Python lab's joined workspace, specimen cards, point colors, and shared playback timeline. Reconstruction uses fixed visual markers, not uncertainty kernels. Camera frame and widefield show the same physical crop. Camera previews use one linear scale throughout an acquisition; widefield is the mean of actual raw frames, normalized separately. Both retain simulated drift. The timeline selects the cumulative reconstruction and its camera frame; the widefield mean and matched-error measurement always cover the full acquisition.
+The interface preserves the original Python lab's joined workspace, specimen cards, navy fields, purple fluorescence, mint localizations, and shared playback timeline. Reconstruction uses fixed visual markers, not uncertainty kernels. All images show the same physical crop.
+
+- **Conventional microscope** shows the ideal fluorescence image with every emitter on, convolved with the acquisition's Gaussian PSF. It omits noise, background, stage motion, and camera sampling. The PSF is integrated over a fine display grid, including contributions from outside the crop, then smoothly scaled in the original purple palette. This image is normalized independently and stays fixed during playback. It illustrates optical blur; it is not a measured camera frame or a brightness comparison. See [Nikon's explanation of diffraction and the PSF](https://www.microscopyu.com/techniques/super-resolution/the-diffraction-barrier-in-optical-microscopy).
+- **STORM camera** switches between the selected acquired frame and the mean of all actual raw frames. Single-frame previews use one linear scale throughout an acquisition; the mean is normalized separately. Both retain camera pixels and simulated drift.
+- The timeline selects the cumulative reconstruction and its camera frame. The all-frame mean and matched-error measurement always cover the full acquisition.
 
 CSV contains full-precision raw **and known-drift-corrected** coordinates in nm, zero-based frame indices, and acquisition settings, regardless of the display toggle. PNG exports the current view and selected frame, with a physical scale bar and display metadata.
 
