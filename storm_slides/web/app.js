@@ -39,20 +39,6 @@ const presets = {
   crowded: { ...defaults, n_emitters: 340, on_probability: 0.1 },
   drift: { ...defaults, drift_nm: 3.5 },
 };
-const specimens = {
-  filaments: {
-    title: "Filament study",
-    description: "Trace a network of five fluorescent filaments.",
-  },
-  rings: {
-    title: "Ring study",
-    description: "Resolve the hollow centers of three fluorescent rings.",
-  },
-  clusters: {
-    title: "Cluster study",
-    description: "Separate six small islands of fluorescent labels.",
-  },
-};
 const state = {
   experiment: null,
   pixels: null,
@@ -88,8 +74,6 @@ function updateLabels() {
     $(`${key}-value`).textContent = value;
     $(key).setAttribute("aria-valuetext", value);
   }
-  $("specimen-description").textContent =
-    specimens[values.specimen].description;
   const dirty =
     state.experiment &&
     Object.keys(defaults).some(
@@ -97,7 +81,7 @@ function updateLabels() {
     );
   $("run-note").textContent = dirty
     ? "Settings changed. Run to update the images."
-    : `Reproducible with seed ${values.seed}`;
+    : `Seed ${values.seed}`;
 }
 
 function setSettings(values) {
@@ -149,12 +133,12 @@ function tick(now) {
 function updateAcquisitionStatus() {
   if (state.busy) return;
   $("acquisition-status").textContent = !state.experiment
-    ? "Ready for an experiment"
+    ? "Ready"
     : state.playing
-      ? "Replaying acquisition"
+      ? "Playing"
       : state.frame === state.experiment.settings.frame_count
-        ? "Acquisition complete"
-        : "Acquisition paused";
+        ? "Complete"
+        : "Paused";
 }
 
 function render() {
@@ -190,7 +174,6 @@ function render() {
     state.view === "truth"
       ? `${experiment.settings.n_emitters} reference emitters`
       : `${number.format(count)} localizations`;
-  $("active-count").textContent = `${active} emitters on`;
   $("metric-count").textContent = number.format(count);
   $("metric-precision").replaceChildren(
     document.createTextNode(
@@ -201,13 +184,7 @@ function render() {
   $("metric-active").textContent = active;
   $("total-emitters").textContent = experiment.settings.n_emitters;
   $("main-view-title").textContent =
-    state.view === "truth" ? "Ground truth" : "STORM reconstruction";
-  $("field-label").textContent =
-    state.view === "truth"
-      ? "The original fluorescent labels."
-      : state.correctDrift
-        ? "One blink. One fitted position."
-        : "Reconstruction with sample drift.";
+    state.view === "truth" ? "Ground truth" : "Reconstruction";
   $("reconstruction").setAttribute(
     "aria-label",
     state.view === "truth"
@@ -219,34 +196,34 @@ function render() {
     `Camera frame ${state.frame} of ${frameCount}, with ${active} active emitters.`,
   );
   $("experiment-name").textContent =
-    specimens[experiment.settings.specimen].title;
-  $("insight").textContent =
+    `Synthetic ${experiment.settings.specimen}`;
+  const note =
     count === 0
       ? "No accepted fits yet. Try more photons or lower background."
       : experiment.settings.on_probability > 0.06
-        ? "Crowded blinks can bias a single-emitter fit. Try fewer activations."
-        : !state.correctDrift && experiment.settings.drift_nm > 1
-          ? "Drift smears the reconstruction. Compare with known drift correction."
-          : "Each point is a fitted blink. More observations gradually reveal the specimen.";
-  updateAcquisitionStatus();
+        ? "Overlapping emitters can bias position estimates. Reduce the activation probability."
+        : state.view !== "truth" &&
+            !state.correctDrift &&
+            experiment.settings.drift_nm > 1
+          ? "Drift correction is off. Positions include simulated sample motion."
+          : "";
+  $("fit-note").textContent = note;
+  $("fit-note").hidden = !note;
 }
 
 function busy(value) {
   state.busy = value;
   $("run-button").disabled = value;
   $("run-button").querySelector("span").textContent = value
-    ? "Acquiring & fitting…"
+    ? "Running…"
     : "Run experiment";
   $("observation-panel").setAttribute("aria-busy", String(value));
   $("loading-state").hidden = !value;
-  $("loading-state").querySelector(".loading-orbit").hidden = !value;
   $("play-button").disabled = value || !state.experiment;
   $("frame-slider").disabled = value || !state.experiment;
   $("export-button").disabled = value || !state.experiment;
   $("save-image").disabled = value || !state.experiment;
-  if (value)
-    $("acquisition-status").textContent =
-      "Simulating & fitting individual blinks…";
+  if (value) $("acquisition-status").textContent = "Running experiment…";
 }
 
 async function acquire() {
@@ -254,9 +231,9 @@ async function acquire() {
   setPlaying(false);
   const submitted = settings();
   busy(true);
-  $("loading-title").textContent = "Gathering a little light";
+  $("loading-title").textContent = "Running experiment…";
   $("loading-description").textContent =
-    "Simulating photons and fitting individual blinks…";
+    "Simulating camera frames and fitting emitters.";
   $("feedback").hidden = true;
   try {
     const response = await fetch("/api/experiment", {
@@ -301,9 +278,9 @@ async function acquire() {
     render();
     if (!state.experiment) {
       $("loading-state").hidden = false;
-      $("loading-title").textContent = "Ready when you are";
+      $("loading-title").textContent = "Acquisition failed";
       $("loading-description").textContent =
-        "Set up an experiment, then choose Run experiment.";
+        "Run the experiment again to retry.";
     }
   }
 }

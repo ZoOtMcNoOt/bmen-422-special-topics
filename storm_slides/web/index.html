@@ -6,9 +6,9 @@
     <meta name="theme-color" content="#f5f6fa" />
     <meta
       name="description"
-      content="Explore single-molecule microscopy. Simulate blinking fluorophores and reconstruct a sharper image, one localization at a time."
+      content="Simulate STORM microscopy acquisitions and compare camera frames, fitted localizations, and ground truth."
     />
-    <title>STORM Lab · A closer look</title>
+    <title>STORM simulator</title>
     <link rel="icon" type="image/svg+xml" href="/mark.svg" />
     <link rel="stylesheet" href="/styles.css" />
     <script type="module" src="/app.js"></script>
@@ -16,41 +16,20 @@
   <body>
     <a class="skip-link" href="#workspace">Skip to experiment</a>
     <header class="site-header">
-      <a class="brand" href="/" aria-label="STORM Lab home"
-        ><img src="/mark.svg" width="34" height="34" alt="" /><span
-          >STORM<span class="brand-light">lab</span></span
-        ></a
-      >
-      <nav aria-label="Main navigation">
-        <a class="active" href="#workspace">Simulator</a
-        ><a href="#principle">How it works</a
-        ><button id="model-button" class="text-button">
-          Model notes <span aria-hidden="true">↗</span>
-        </button>
-      </nav>
-      <span class="course-label">An exploration in microscopy</span>
-    </header>
-
-    <main>
-      <section class="intro" aria-labelledby="page-title">
-        <div>
-          <p class="intro-kicker">
-            <span class="small-orbit" aria-hidden="true"></span>Single-molecule
-            imaging, made visible
-          </p>
-          <h1 id="page-title">A closer look at the invisible.</h1>
-          <p>
-            Let molecules blink. Find their centers. Watch a sharper picture
-            emerge.
-          </p>
-        </div>
+      <h1>
+        <img src="/mark.svg" width="30" height="30" alt="" />STORM simulator
+      </h1>
+      <div class="header-actions">
+        <button id="model-button" class="text-button">Model notes</button>
         <button id="export-button" class="secondary-button" disabled>
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M12 3v12m-4-4 4 4 4-4M5 16v4h14v-4" /></svg
-          >Export localizations
+          >Export CSV
         </button>
-      </section>
+      </div>
+    </header>
 
+    <main>
       <section
         id="workspace"
         class="workspace"
@@ -58,7 +37,7 @@
       >
         <aside class="settings-panel" aria-labelledby="settings-title">
           <div class="panel-heading">
-            <h2 id="settings-title">Set up your experiment</h2>
+            <h2 id="settings-title">Acquisition</h2>
             <button
               id="reset-button"
               class="icon-button"
@@ -72,7 +51,7 @@
           </div>
           <form id="settings-form">
             <fieldset class="specimen-picker">
-              <legend>Choose a specimen</legend>
+              <legend>Specimen</legend>
               <div class="specimen-options">
                 <label
                   ><input
@@ -111,22 +90,19 @@
                 >
               </div>
             </fieldset>
-            <p class="specimen-description" id="specimen-description">
-              Trace a network of five fluorescent filaments.
-            </p>
-            <label class="select-label" for="preset">Acquisition preset</label>
+            <label class="select-label" for="preset">Preset</label>
             <select id="preset">
-              <option value="balanced">A balanced start</option>
-              <option value="photons">More light, finer detail</option>
-              <option value="crowded">When molecules overlap</option>
-              <option value="drift">A drifting specimen</option>
-              <option value="custom" hidden>Custom experiment</option>
+              <option value="balanced">Standard</option>
+              <option value="photons">High photon yield</option>
+              <option value="crowded">Overlapping emitters</option>
+              <option value="drift">Sample drift</option>
+              <option value="custom" hidden>Custom</option>
             </select>
 
             <div class="settings-divider"></div>
             <div class="control">
               <label for="photon_mean"
-                >Photon budget
+                >Photons
                 <output for="photon_mean" id="photon_mean-value"
                   >1,200</output
                 ></label
@@ -146,7 +122,7 @@
             </div>
             <div class="control">
               <label for="n_emitters"
-                >Labeling density
+                >Emitters
                 <output for="n_emitters" id="n_emitters-value"
                   >220</output
                 ></label
@@ -159,13 +135,11 @@
                 step="20"
                 value="220"
               />
-              <div class="range-caption">
-                <span>Sparse</span><span>emitters</span><span>Dense</span>
-              </div>
+              <div class="range-caption"><span>40</span><span>360</span></div>
             </div>
             <div class="control">
               <label for="on_probability"
-                >Blink activation
+                >Activation probability
                 <output for="on_probability" id="on_probability-value"
                   >1.8%</output
                 ></label
@@ -179,13 +153,11 @@
                 value="0.018"
               />
               <div class="range-caption">
-                <span>Isolated blinks</span><span>More overlap</span>
+                <span>0.5%</span><span>per frame</span><span>12%</span>
               </div>
             </div>
             <details class="advanced-settings">
-              <summary>
-                Fine-tune acquisition <span aria-hidden="true">+</span>
-              </summary>
+              <summary>More settings <span aria-hidden="true">+</span></summary>
               <div class="control">
                 <label for="background_lambda"
                   >Background
@@ -251,31 +223,22 @@
                 <path d="m8 5 11 7-11 7Z" /></svg
               ><span>Run experiment</span>
             </button>
-            <p class="run-note" id="run-note">Reproducible with seed 42</p>
+            <p class="run-note" id="run-note">Seed 42</p>
           </form>
         </aside>
 
         <div class="observation-panel" aria-busy="true" id="observation-panel">
           <div class="observation-toolbar">
-            <div class="experiment-name">
-              <span
-                class="status-dot"
-                id="status-dot"
-                aria-hidden="true"
-              ></span>
-              <h2 id="experiment-name">Filament study</h2>
-              <span class="synthetic-badge">Synthetic specimen</span>
-            </div>
+            <h2 id="experiment-name">Synthetic filaments</h2>
             <span id="acquisition-status" role="status"
-              >Preparing your first experiment…</span
+              >Running experiment…</span
             >
           </div>
           <div class="image-grid">
             <figure class="image-panel reconstruction-panel">
               <figcaption>
                 <div>
-                  <span class="channel-dot teal" aria-hidden="true"></span>
-                  <h3 id="main-view-title">STORM reconstruction</h3>
+                  <h3 id="main-view-title">Reconstruction</h3>
                 </div>
                 <span id="view-count">Waiting for acquisition</span>
               </figcaption>
@@ -288,18 +251,16 @@
                   aria-label="Reconstruction from localized emitter positions. Run an experiment to populate this image."
                 ></canvas>
                 <div class="field-top">
-                  <span id="field-label">One blink. One fitted position.</span
-                  ><button
+                  <button
                     id="save-image"
                     class="field-icon"
-                    aria-label="Save reconstruction image"
+                    aria-label="Save image as PNG"
                     title="Save current image as PNG"
                     disabled
                   >
+                    PNG
                     <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <path
-                        d="M8 5h8l2 3h3v12H3V8h3Zm4 6a3 3 0 1 0 0 6 3 3 0 0 0 0-6"
-                      />
+                      <path d="M12 3v12m-4-4 4 4 4-4M5 16v4h14v-4" />
                     </svg>
                   </button>
                 </div>
@@ -308,10 +269,9 @@
                   ><span id="field-size">6.4 × 6.4 μm</span>
                 </div>
                 <div class="loading-state" id="loading-state">
-                  <span class="loading-orbit" aria-hidden="true"></span
-                  ><strong id="loading-title">Gathering a little light</strong
+                  <strong id="loading-title">Running experiment…</strong
                   ><span id="loading-description"
-                    >Simulating photons and fitting individual blinks…</span
+                    >Simulating camera frames and fitting emitters.</span
                   >
                 </div>
               </div>
@@ -328,11 +288,11 @@
                   </button>
                 </div>
                 <label class="switch-label"
-                  ><input id="drift-correction" type="checkbox" checked /><span
-                    class="switch"
-                    aria-hidden="true"
-                  ></span
-                  >Correct known drift</label
+                  ><input
+                    id="drift-correction"
+                    type="checkbox"
+                    checked
+                  />Correct known drift</label
                 >
               </div>
             </figure>
@@ -340,7 +300,6 @@
               <figure class="image-panel">
                 <figcaption>
                   <div>
-                    <span class="channel-dot violet" aria-hidden="true"></span>
                     <h3>Camera frame</h3>
                   </div>
                   <span id="camera-index">— / —</span>
@@ -354,19 +313,14 @@
                     aria-label="A single noisy camera frame; active emitters appear as blurred spots."
                   ></canvas>
                   <div class="field-bottom">
-                    <span class="scale-bar"><i></i>1 μm</span
-                    ><span id="active-count">Sparse emission</span>
+                    <span class="scale-bar"><i></i>1 μm</span>
                   </div>
                 </div>
               </figure>
               <figure class="image-panel">
                 <figcaption>
                   <div>
-                    <span
-                      class="channel-dot violet muted-dot"
-                      aria-hidden="true"
-                    ></span>
-                    <h3>Widefield comparison</h3>
+                    <h3>Widefield</h3>
                   </div>
                 </figcaption>
                 <div class="microscopy-field reference-field">
@@ -399,7 +353,7 @@
             </button>
             <div class="timeline">
               <div class="timeline-heading">
-                <label for="frame-slider">Acquisition timeline</label
+                <label for="frame-slider">Frame</label
                 ><output id="frame-value" for="frame-slider"
                   >0 / 160 frames</output
                 >
@@ -422,7 +376,7 @@
               />
             </div>
             <label class="speed-control" for="playback-speed"
-              >Playback<select id="playback-speed">
+              >Speed<select id="playback-speed">
                 <option value="10">½×</option>
                 <option value="20" selected>1×</option>
                 <option value="40">2×</option>
@@ -447,74 +401,16 @@
                 labels</small
               >
             </div>
-            <div class="metric-insight">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path
-                  d="M9 18h6m-5 3h4M8 13a6 6 0 1 1 8 0c-1 1-1 2-1 3H9c0-1 0-2-1-3Z"
-                />
-              </svg>
-              <p id="insight">
-                A few molecules at a time. That’s the secret to seeing beyond
-                the blur.
-              </p>
-            </div>
           </div>
+          <p id="fit-note" class="fit-note" hidden></p>
         </div>
       </section>
       <p class="feedback" id="feedback" role="alert" hidden></p>
-
-      <section
-        class="principle-section"
-        id="principle"
-        aria-labelledby="principle-title"
-      >
-        <div class="principle-intro">
-          <span class="small-orbit" aria-hidden="true"></span>
-          <h2 id="principle-title">The picture is in the blinking.</h2>
-          <p>STORM separates light in time to reveal detail in space.</p>
-        </div>
-        <ol class="principle-steps">
-          <li>
-            <span class="step-number">1</span>
-            <div>
-              <h3>Switch on a few</h3>
-              <p>
-                Sparse emitters create isolated spots of light on the camera.
-              </p>
-            </div>
-          </li>
-          <li>
-            <span class="step-number">2</span>
-            <div>
-              <h3>Find each center</h3>
-              <p>
-                A probability model estimates the position inside each blurry
-                spot.
-              </p>
-            </div>
-          </li>
-          <li>
-            <span class="step-number">3</span>
-            <div>
-              <h3>Build the bigger picture</h3>
-              <p>
-                Thousands of positions reveal the structure behind the blur.
-              </p>
-            </div>
-          </li>
-        </ol>
-      </section>
-      <footer>
-        <span
-          >STORM Lab <span class="footer-separator">/</span> Stochastic optical
-          reconstruction microscopy</span
-        ><span>Built for curiosity. Grounded in photons.</span>
-      </footer>
     </main>
 
     <dialog id="model-dialog" aria-labelledby="model-title">
       <div class="dialog-heading">
-        <h2 id="model-title">Inside this experiment</h2>
+        <h2 id="model-title">Model notes</h2>
         <button
           id="close-model"
           class="icon-button"
@@ -524,8 +420,9 @@
         </button>
       </div>
       <p>
-        This is an educational 2D simulation of a synthetic specimen. Every
-        reconstruction point comes from a fit to a simulated camera frame.
+        Stochastic optical reconstruction microscopy (STORM). Specimens are
+        synthetic 2D structures; reconstructed positions are fitted to simulated
+        camera frames.
       </p>
       <dl>
         <dt>Camera & optics</dt>
