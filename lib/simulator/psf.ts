@@ -45,3 +45,24 @@ export function gaussianPsfPixelIntegrated(
   const ey = 0.5 * (erf((yHigh - y0) / norm) - erf((yLow - y0) / norm));
   return ex * ey;
 }
+
+/** Pixel probability and analytic derivatives with respect to the emitter (per nm). */
+export function gaussianPsfPixelIntegratedGradient(
+  xLow: number,
+  xHigh: number,
+  yLow: number,
+  yHigh: number,
+  x0: number,
+  y0: number,
+  sigmaNm: number
+): { value: number; dx: number; dy: number } {
+  const norm = sigmaNm * Math.SQRT2;
+  const ex = 0.5 * (erf((xHigh - x0) / norm) - erf((xLow - x0) / norm));
+  const ey = 0.5 * (erf((yHigh - y0) / norm) - erf((yLow - y0) / norm));
+  const density = (offset: number) => Math.exp(-0.5 * (offset / sigmaNm) ** 2) / (Math.sqrt(2 * Math.PI) * sigmaNm);
+  return {
+    value: ex * ey,
+    dx: (density(xLow - x0) - density(xHigh - x0)) * ey,
+    dy: (density(yLow - y0) - density(yHigh - y0)) * ex,
+  };
+}

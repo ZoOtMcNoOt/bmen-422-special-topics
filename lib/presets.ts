@@ -1,4 +1,4 @@
-import { DIFFRACTION_LIMIT_NM, FIELD_SIZE_NM } from './simulator/defaults';
+import { FIELD_SIZE_NM } from './simulator/defaults';
 import { clamp } from './utils';
 import type { Emitter, GroundTruthInput, ViewBox } from './simulator/types';
 
@@ -24,7 +24,7 @@ type Preset = {
 export const PRESETS: Record<PresetKind, Preset> = {
   'two-lines': {
     label: 'Two lines',
-    blurb: `50 nm apart — well below the ~${DIFFRACTION_LIMIT_NM} nm diffraction limit.`,
+    blurb: 'Parallel lines, 50 nm apart.',
     viewSizeNm: 1000,
     build: (n) => ({
       kind: 'two-lines',
@@ -35,13 +35,13 @@ export const PRESETS: Record<PresetKind, Preset> = {
   },
   ring: {
     label: 'Microtubule',
-    blurb: '60 nm ring — an antibody-labelled microtubule seen end-on.',
+    blurb: 'A 60 nm ring representing a labelled cross-section.',
     viewSizeNm: 500,
     build: (n) => ({ kind: 'ring', diameterNm: 60, nEmitters: n }),
   },
   actin: {
     label: 'Actin rings',
-    blurb: '190 nm periodic actin–spectrin lattice (Xu et al., Science 2013).',
+    blurb: 'A synthetic lattice with 190 nm spacing.',
     viewSizeNm: 2000,
     build: (n) => ({
       kind: 'actin',
@@ -53,7 +53,7 @@ export const PRESETS: Record<PresetKind, Preset> = {
   },
   image: {
     label: 'Your image',
-    blurb: 'Upload a picture — bright pixels become molecules.',
+    blurb: 'Bright image pixels define the sample.',
     viewSizeNm: null,
     build: (n, image) => (image ? { kind: 'image', imageData: image, nEmitters: n } : null),
   },

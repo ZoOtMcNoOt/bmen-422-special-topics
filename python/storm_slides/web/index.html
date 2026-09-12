@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f5f6fa" />
+    <meta
+      name="description"
+      content="Simulate STORM microscopy acquisitions and compare camera frames, fitted localizations, and ground truth."
+    />
+    <title>STORM simulator</title>
+    <link rel="icon" type="image/svg+xml" href="/mark.svg" />
+    <link rel="stylesheet" href="/styles.css" />
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#workspace">Skip to experiment</a>
+    <header class="site-header">
+      <h1>
+        <img src="/mark.svg" width="30" height="30" alt="" />STORM simulator
+      </h1>
+      <div class="header-actions">
+        <button id="model-button" class="text-button">Model notes</button>
+        <button id="export-button" class="secondary-button" disabled>
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 3v12m-4-4 4 4 4-4M5 16v4h14v-4" /></svg
+          >Export CSV
+        </button>
+      </div>
+    </header>
+
+    <main>
+      <section
+        id="workspace"
+        class="workspace"
+        aria-label="STORM experiment workspace"
+      >
+        <aside class="settings-panel" aria-labelledby="settings-title">
+          <div class="panel-heading">
+            <h2 id="settings-title">Acquisition</h2>
+            <button
+              id="reset-button"
+              class="icon-button"
+              aria-label="Reset experiment settings"
+              title="Reset settings"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 10a8 8 0 1 1 1 7M4 4v6h6" />
+              </svg>
+            </button>
+          </div>
+          <form id="settings-form">
+            <fieldset class="specimen-picker">
+              <legend>Specimen</legend>
+              <div class="specimen-options">
+                <label
+                  ><input
+                    type="radio"
+                    name="specimen"
+                    value="filaments"
+                    checked
+                  /><span class="specimen-option"
+                    ><svg viewBox="0 0 60 40" aria-hidden="true">
+                      <path
+                        d="M4 30C15 5 26 34 56 8M4 15C22 38 34 4 54 28M8 38C27 31 28 10 51 3"
+                      /></svg
+                    ><span>Filaments</span></span
+                  ></label
+                >
+                <label
+                  ><input type="radio" name="specimen" value="rings" /><span
+                    class="specimen-option"
+                    ><svg viewBox="0 0 60 40" aria-hidden="true">
+                      <circle cx="20" cy="18" r="11" />
+                      <circle cx="41" cy="24" r="9" /></svg
+                    ><span>Rings</span></span
+                  ></label
+                >
+                <label
+                  ><input type="radio" name="specimen" value="clusters" /><span
+                    class="specimen-option"
+                    ><svg viewBox="0 0 60 40" aria-hidden="true">
+                      <path
+                        stroke-dasharray="1 6"
+                        stroke-width="5"
+                        d="M12 12h12m-8 6h8m14 5h12m-9 6h8M14 31h6M40 9h6"
+                      /></svg
+                    ><span>Clusters</span></span
+                  ></label
+                >
+              </div>
+            </fieldset>
+            <label class="select-label" for="preset">Preset</label>
+            <select id="preset">
+              <option value="balanced">Standard</option>
+              <option value="photons">High photon yield</option>
+              <option value="crowded">Overlapping emitters</option>
+              <option value="drift">Sample drift</option>
+              <option value="custom" hidden>Custom</option>
+            </select>
+
+            <div class="settings-divider"></div>
+            <div class="control">
+              <label for="photon_mean"
+                >Photons
+                <output for="photon_mean" id="photon_mean-value"
+                  >1,200</output
+                ></label
+              ><input
+                id="photon_mean"
+                name="photon_mean"
+                type="range"
+                min="100"
+                max="4000"
+                step="100"
+                value="1200"
+              />
+              <div class="range-caption">
+                <span>100</span><span>per emitter / frame</span
+                ><span>4,000</span>
+              </div>
+            </div>
+            <div class="control">
+              <label for="n_emitters"
+                >Emitters
+                <output for="n_emitters" id="n_emitters-value"
+                  >220</output
+                ></label
+              ><input
+                id="n_emitters"
+                name="n_emitters"
+                type="range"
+                min="40"
+                max="360"
+                step="20"
+                value="220"
+              />
+              <div class="range-caption"><span>40</span><span>360</span></div>
+            </div>
+            <div class="control">
+              <label for="on_probability"
+                >Activation probability
+                <output for="on_probability" id="on_probability-value"
+                  >1.8%</output
+                ></label
+              ><input
+                id="on_probability"
+                name="on_probability"
+                type="range"
+                min="0.005"
+                max="0.12"
+                step="0.001"
+                value="0.018"
+              />
+              <div class="range-caption">
+                <span>0.5%</span><span>per frame</span><span>12%</span>
+              </div>
+            </div>
+            <details class="advanced-settings">
+              <summary>More settings <span aria-hidden="true">+</span></summary>
+              <div class="control">
+                <label for="background_lambda"
+                  >Background
+                  <output for="background_lambda" id="background_lambda-value"
+                    >2</output
+                  ></label
+                ><input
+                  id="background_lambda"
+                  name="background_lambda"
+                  type="range"
+                  min="0"
+                  max="20"
+                  step="1"
+                  value="2"
+                />
+                <p class="control-hint">Mean photons per pixel per frame</p>
+              </div>
+              <div class="control">
+                <label for="drift_nm"
+                  >Horizontal drift
+                  <output for="drift_nm" id="drift_nm-value"
+                    >0.5 nm</output
+                  ></label
+                ><input
+                  id="drift_nm"
+                  name="drift_nm"
+                  type="range"
+                  min="0"
+                  max="4"
+                  step="0.1"
+                  value="0.5"
+                />
+                <p class="control-hint">
+                  Per frame; vertical drift is −0.35× this
+                </p>
+              </div>
+              <div class="number-controls">
+                <label for="frame_count"
+                  >Frames<input
+                    id="frame_count"
+                    name="frame_count"
+                    type="number"
+                    min="20"
+                    max="240"
+                    step="20"
+                    value="160"
+                    required /></label
+                ><label for="seed"
+                  >Random seed<input
+                    id="seed"
+                    name="seed"
+                    type="number"
+                    min="0"
+                    max="4294967295"
+                    step="1"
+                    value="42"
+                    required
+                /></label>
+              </div>
+            </details>
+            <button class="primary-button" type="submit" id="run-button">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m8 5 11 7-11 7Z" /></svg
+              ><span>Run experiment</span>
+            </button>
+            <p class="run-note" id="run-note">Seed 42</p>
+          </form>
+        </aside>
+
+        <div class="observation-panel" aria-busy="true" id="observation-panel">
+          <div class="observation-toolbar">
+            <h2 id="experiment-name">Synthetic filaments</h2>
+            <span id="acquisition-status" role="status"
+              >Running experiment…</span
+            >
+          </div>
+          <div class="image-grid">
+            <figure class="image-panel reconstruction-panel">
+              <figcaption>
+                <div>
+                  <h3 id="main-view-title">Reconstruction</h3>
+                </div>
+                <span id="view-count">Waiting for acquisition</span>
+              </figcaption>
+              <div class="microscopy-field main-field" id="main-field">
+                <canvas
+                  id="reconstruction"
+                  width="640"
+                  height="640"
+                  role="img"
+                  aria-label="Reconstruction from localized emitter positions. Run an experiment to populate this image."
+                ></canvas>
+                <div class="field-top">
+                  <button
+                    id="save-image"
+                    class="field-icon"
+                    aria-label="Save image as PNG"
+                    title="Save current image as PNG"
+                    disabled
+                  >
+                    PNG
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M12 3v12m-4-4 4 4 4-4M5 16v4h14v-4" />
+                    </svg>
+                  </button>
+                </div>
+                <div class="field-bottom">
+                  <span class="scale-bar"><i></i>1 μm</span
+                  ><span id="field-size">6.4 × 6.4 μm</span>
+                </div>
+                <div class="loading-state" id="loading-state">
+                  <strong id="loading-title">Running experiment…</strong
+                  ><span id="loading-description"
+                    >Simulating camera frames and fitting emitters.</span
+                  >
+                </div>
+              </div>
+              <div class="view-options">
+                <div class="segmented-control" aria-label="Main image view">
+                  <button
+                    type="button"
+                    data-view="reconstruction"
+                    aria-pressed="true"
+                  >
+                    Reconstruction</button
+                  ><button type="button" data-view="truth" aria-pressed="false">
+                    Ground truth
+                  </button>
+                </div>
+                <label class="switch-label"
+                  ><input
+                    id="drift-correction"
+                    type="checkbox"
+                    checked
+                  />Correct known drift</label
+                >
+              </div>
+            </figure>
+            <div class="reference-views">
+              <figure class="image-panel">
+                <figcaption>
+                  <div>
+                    <h3>Camera frame</h3>
+                  </div>
+                  <span id="camera-index">— / —</span>
+                </figcaption>
+                <div class="microscopy-field reference-field">
+                  <canvas
+                    id="camera"
+                    width="320"
+                    height="320"
+                    role="img"
+                    aria-label="A single noisy camera frame; active emitters appear as blurred spots."
+                  ></canvas>
+                  <div class="field-bottom">
+                    <span class="scale-bar"><i></i>1 μm</span>
+                  </div>
+                </div>
+              </figure>
+              <figure class="image-panel">
+                <figcaption>
+                  <div>
+                    <h3>Widefield</h3>
+                  </div>
+                </figcaption>
+                <div class="microscopy-field reference-field">
+                  <canvas
+                    id="widefield"
+                    width="320"
+                    height="320"
+                    role="img"
+                    aria-label="Mean of all camera frames, showing diffraction blur and any uncorrected drift."
+                  ></canvas>
+                  <div class="field-bottom">
+                    <span class="scale-bar"><i></i>1 μm</span
+                    ><span>All-frame mean</span>
+                  </div>
+                </div>
+              </figure>
+            </div>
+          </div>
+
+          <div class="playback-panel">
+            <button
+              id="play-button"
+              class="play-button"
+              aria-label="Play acquisition"
+              disabled
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path id="play-icon" d="m9 5 11 7-11 7Z" />
+              </svg>
+            </button>
+            <div class="timeline">
+              <div class="timeline-heading">
+                <label for="frame-slider">Frame</label
+                ><output id="frame-value" for="frame-slider"
+                  >0 / 160 frames</output
+                >
+              </div>
+              <canvas
+                id="activity-chart"
+                height="30"
+                width="800"
+                role="img"
+                aria-label="Accepted localizations per frame. Use the slider below to scrub the acquisition."
+              ></canvas
+              ><input
+                id="frame-slider"
+                type="range"
+                min="1"
+                max="160"
+                value="160"
+                disabled
+                aria-label="Acquisition frame"
+              />
+            </div>
+            <label class="speed-control" for="playback-speed"
+              >Speed<select id="playback-speed">
+                <option value="10">½×</option>
+                <option value="20" selected>1×</option>
+                <option value="40">2×</option>
+              </select></label
+            >
+          </div>
+          <div class="metrics-strip" aria-label="Acquisition measurements">
+            <div>
+              <span>Localizations</span><strong id="metric-count">—</strong
+              ><small>through the selected frame</small>
+            </div>
+            <div>
+              <span>Median fit precision</span
+              ><strong id="metric-precision">— <em>nm</em></strong
+              ><small>model estimate, per axis</small>
+            </div>
+            <div>
+              <span>Emitters on this frame</span
+              ><strong id="metric-active">—</strong
+              ><small
+                >of <span id="total-emitters">220</span> fluorescent
+                labels</small
+              >
+            </div>
+          </div>
+          <p id="fit-note" class="fit-note" hidden></p>
+        </div>
+      </section>
+      <p class="feedback" id="feedback" role="alert" hidden></p>
+    </main>
+
+    <dialog id="model-dialog" aria-labelledby="model-title">
+      <div class="dialog-heading">
+        <h2 id="model-title">Model notes</h2>
+        <button
+          id="close-model"
+          class="icon-button"
+          aria-label="Close model notes"
+        >
+          ✕
+        </button>
+      </div>
+      <p>
+        Stochastic optical reconstruction microscopy (STORM). Specimens are
+        synthetic 2D structures; reconstructed positions are fitted to simulated
+        camera frames.
+      </p>
+      <dl>
+        <dt>Camera & optics</dt>
+        <dd>
+          64 × 64 pixels at 100 nm per pixel. A pixel-integrated Gaussian PSF
+          has a fixed 120 nm standard deviation. Photon counts follow a Poisson
+          model, with no read noise.
+        </dd>
+        <dt>Blinking</dt>
+        <dd>
+          A two-state process with adjustable off-to-on probability and a 40%
+          on-to-off probability each frame. Photon yield varies across active
+          frames. Photobleaching is not modeled.
+        </dd>
+        <dt>Localization</dt>
+        <dd>
+          Local maxima are fitted with a single-emitter Gaussian Poisson
+          maximum-likelihood estimator. Overlapping emitters can bias fits.
+          Reported precision is a Fisher-information estimate under that model;
+          it is not a measured image resolution.
+        </dd>
+        <dt>Drift correction</dt>
+        <dd>
+          The switch subtracts the exact simulated drift. This demonstrates
+          ideal correction; drift is not estimated from the images.
+        </dd>
+        <dt>Images & export</dt>
+        <dd>
+          Camera frames use one display scale across the acquisition. Widefield
+          shows the mean of all frames, including future frames during playback.
+          The reconstruction uses fixed-size display dots, not uncertainty
+          kernels. CSV exports all accepted fits, both raw and corrected
+          coordinates, precision, and acquisition settings. Frames in the
+          interface are display previews.
+        </dd>
+      </dl>
+      <p class="model-references">
+        Methods:
+        <a
+          href="https://doi.org/10.1038/nmeth.1447"
+          target="_blank"
+          rel="noreferrer"
+          >Mortensen et al., 2010</a
+        >
+        ·
+        <a
+          href="https://doi.org/10.1016/S0006-3495(02)75618-X"
+          target="_blank"
+          rel="noreferrer"
+          >Thompson et al., 2002</a
+        >
+      </p>
+    </dialog>
+    <noscript
+      >This interactive lab needs JavaScript. Enable it, then reload to run an
+      experiment.</noscript
+    >
+  </body>
+</html>

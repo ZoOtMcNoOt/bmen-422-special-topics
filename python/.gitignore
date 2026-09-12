@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+pytest-cache-files-*/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+.tmp/
+build/
+dist/
+*.egg-info/
+
+# Manim / Manim Slides outputs
+media/
+.manim-slides/
+slides/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db

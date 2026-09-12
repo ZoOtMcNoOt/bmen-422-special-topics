@@ -2,10 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { thompsonSigmaLoc } from '@/lib/simulator/thompson';
 
 describe('thompsonSigmaLoc', () => {
-  it('reproduces the canonical ~3 nm at N=3000, σ=130, a=160, b=10', () => {
-    const s = thompsonSigmaLoc(130, 3000, 160, 10);
-    expect(s).toBeGreaterThan(2.5);
-    expect(s).toBeLessThan(3.5);
+  it('uses Poisson background variance, rather than squaring its mean', () => {
+    // TLW noise SD sqrt(20) photons corresponds to this camera mean of 20.
+    // Independently evaluated reference values: sigma=130 nm, a=160 nm.
+    expect(thompsonSigmaLoc(130, 5000, 160, 20)).toBeCloseTo(2.007731116488115, 10);
+    expect(thompsonSigmaLoc(130, 200, 160, 20)).toBeCloseTo(15.34161489451591, 10);
   });
 
   it('scales exactly as 1/√N when b = 0', () => {

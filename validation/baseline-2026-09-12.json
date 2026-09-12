@@ -1,0 +1,116 @@
+[
+  {
+    "name": "bright",
+    "python": {
+      "trials": 80,
+      "matched_frames": 80,
+      "accepted_fits": 80,
+      "rms_per_axis_nm": 2.2837990720099723,
+      "median_reported_precision_nm": 2.1538341859119043,
+      "localization_seconds": 0.1778837999991083
+    },
+    "typescript": {
+      "trials": 80,
+      "matched_frames": 80,
+      "accepted_fits": 80,
+      "rms_per_axis_nm": 2.2853243346071217,
+      "median_reported_precision_nm": 2.880203919919105,
+      "localization_seconds": 0.015317700000000002
+    }
+  },
+  {
+    "name": "dim",
+    "python": {
+      "trials": 80,
+      "matched_frames": 80,
+      "accepted_fits": 90,
+      "rms_per_axis_nm": 10.110917075327068,
+      "median_reported_precision_nm": 9.089671924960967,
+      "localization_seconds": 0.15729229999851668
+    },
+    "typescript": {
+      "trials": 80,
+      "matched_frames": 80,
+      "accepted_fits": 81,
+      "rms_per_axis_nm": 10.112996929570418,
+      "median_reported_precision_nm": 21.95587412964291,
+      "localization_seconds": 0.013003799999999984
+    }
+  },
+  {
+    "name": "high_background",
+    "python": {
+      "trials": 80,
+      "matched_frames": 80,
+      "accepted_fits": 80,
+      "rms_per_axis_nm": 6.4704592903901,
+      "median_reported_precision_nm": 6.6038239374783885,
+      "localization_seconds": 0.12391190000926144
+    },
+    "typescript": {
+      "trials": 80,
+      "matched_frames": 80,
+      "accepted_fits": 80,
+      "rms_per_axis_nm": 6.476573329038739,
+      "median_reported_precision_nm": 35.36461216166627,
+      "localization_seconds": 0.01058480000000003
+    }
+  },
+  {
+    "name": "broad_psf",
+    "python": {
+      "trials": 80,
+      "matched_frames": 80,
+      "accepted_fits": 86,
+      "rms_per_axis_nm": 12.465003054948014,
+      "median_reported_precision_nm": 12.279697019745171,
+      "localization_seconds": 0.18575169999530772
+    },
+    "typescript": {
+      "trials": 80,
+      "matched_frames": 80,
+      "accepted_fits": 96,
+      "rms_per_axis_nm": 13.097578060604825,
+      "median_reported_precision_nm": 39.255595897657145,
+      "localization_seconds": 0.011810299999999984
+    }
+  },
+  {
+    "name": "sensor_edge",
+    "python": {
+      "trials": 20,
+      "matched_frames": 20,
+      "accepted_fits": 20,
+      "rms_per_axis_nm": 2.8858021380236485,
+      "median_reported_precision_nm": 2.8130748155150425,
+      "localization_seconds": 0.03913539999848581
+    },
+    "typescript": {
+      "trials": 20,
+      "matched_frames": 0,
+      "accepted_fits": 0,
+      "rms_per_axis_nm": null,
+      "median_reported_precision_nm": null,
+      "localization_seconds": 0.00008049999999997226
+    }
+  },
+  {
+    "name": "background_only",
+    "python": {
+      "trials": 20,
+      "matched_frames": 0,
+      "accepted_fits": 152,
+      "rms_per_axis_nm": null,
+      "median_reported_precision_nm": null,
+      "localization_seconds": 0.6503332000065711
+    },
+    "typescript": {
+      "trials": 20,
+      "matched_frames": 0,
+      "accepted_fits": 0,
+      "rms_per_axis_nm": null,
+      "median_reported_precision_nm": null,
+      "localization_seconds": 0.00005600000000004002
+    }
+  }
+]

@@ -1,71 +1,126 @@
 import { describe, expect, it } from 'vitest';
-import { computeDetectionEfficiency, computeEmpiricalPrecision } from '@/lib/simulator/analysis';
-import type { GroundTruth, Localization } from '@/lib/simulator/types';
-import { distance, loc, nearestTo } from './fixtures';
+import { matchFrameLocalizations, summarizeMatches } from '@/lib/simulator/analysis';
+import type { Emitter, Localization } from '@/lib/simulator/types';
+import { loc } from './fixtures';
 
-const truth = (emitters: { x: number; y: number }[], size = 1000): GroundTruth => ({
-  emitters,
-  fieldSizeNm: { width: size, height: size },
-  label: 'test',
-});
+const field = { width: 1000, height: 1000 };
+const match = (detections: Localization[], active: Emitter[], gate = 10, frame = 0) =>
+  matchFrameLocalizations(detections, active, frame, field, gate);
 
-/** Brute-force reference. */
-const bruteNearest = (l: Localization, gt: GroundTruth) => {
-  const e = nearestTo(gt.emitters, l.x, l.y);
-  return distance(e, l.x, l.y);
-};
+/** Exhaustive independent reference for tiny gated bipartite matching problems. */
+function bruteMatch(detections: Localization[], active: Emitter[], gate: number) {
+  let best = { count: -1, distance: Infinity, squared: 0 };
+  function visit(index: number, used: Set<number>, count: number, distance: number, squared: number) {
+    if (index === detections.length) {
+      if (count > best.count || (count === best.count && distance < best.distance)) {
+        best = { count, distance, squared };
+      }
+      return;
+    }
+    visit(index + 1, used, count, distance, squared);
+    active.forEach((emitter, target) => {
+      if (used.has(target)) return;
+      const d = Math.hypot(detections[index].x - emitter.x, detections[index].y - emitter.y);
+      if (d > gate) return;
+      used.add(target);
+      visit(index + 1, used, count + 1, distance + d, squared + d * d);
+      used.delete(target);
+    });
+  }
+  visit(0, new Set(), 0, 0, 0);
+  return best;
+}
 
-describe('computeEmpiricalPrecision', () => {
-  it('returns zeros for empty input', () => {
-    expect(computeEmpiricalPrecision([], truth([{ x: 1, y: 1 }]))).toEqual({ medianNm: 0, p90Nm: 0 });
-    expect(computeEmpiricalPrecision([loc(1, 1)], truth([]))).toEqual({ medianNm: 0, p90Nm: 0 });
+describe('active-frame localization matching', () => {
+  it('prioritizes two valid matches over the cheaper greedy match and one miss', () => {
+    const result = match([loc(101, 100), loc(95, 100)], [{ x: 100, y: 100 }, { x: 110, y: 100 }]);
+    expect(result.matchedCount).toBe(2);
+    expect(result.falsePositiveCount).toBe(0);
+    expect(result.squaredErrorSumNm2).toBe(9 ** 2 + 5 ** 2);
   });
 
-  it('measures known offsets exactly', () => {
-    const gt = truth([{ x: 100, y: 100 }, { x: 500, y: 500 }, { x: 900, y: 900 }]);
-    const out = computeEmpiricalPrecision([loc(103, 100), loc(500, 505), loc(896, 900)], gt);
-    expect(out.medianNm).toBe(4);
-    expect(out.p90Nm).toBe(5);
+  it('minimizes total distance among assignments with maximum cardinality', () => {
+    const result = match([loc(102, 100), loc(108, 100)], [{ x: 100, y: 100 }, { x: 110, y: 100 }], 20);
+    expect(result.matchedCount).toBe(2);
+    expect(result.squaredErrorSumNm2).toBe(8);
   });
 
-  it('finds the true nearest emitter even when it lies two grid rings out', () => {
-    // 100 emitters in a 1000 nm field ⇒ 100 nm cells, 10×10 grid.
-    // Loc (99,50) is in cell (0,0); the emitter at the origin is 110.9 nm away,
-    // but the one at (201,50) — in cell (2,0), ring 2 — is only 102 nm away.
-    const filler = Array.from({ length: 98 }, () => ({ x: 995, y: 995 }));
-    const gt = truth([{ x: 0, y: 0 }, { x: 201, y: 50 }, ...filler]);
-    expect(computeEmpiricalPrecision([loc(99, 50)], gt).medianNm).toBeCloseTo(102, 6);
+  it('counts duplicates as false positives and uses only the closest duplicate', () => {
+    const result = match([loc(102, 100), loc(103, 100), loc(100, 100)], [{ x: 100, y: 100 }]);
+    expect(result).toEqual({ matchedCount: 1, activeEmitterFrames: 1, falsePositiveCount: 2, squaredErrorSumNm2: 0 });
+    expect(summarizeMatches(result, 10).falsePositiveRate).toBeCloseTo(2 / 3);
   });
 
-  it('agrees with brute force on random fields', () => {
-    for (let trial = 0; trial < 20; trial++) {
-      const n = 40 + Math.floor(Math.random() * 60);
-      const gt = truth(Array.from({ length: n }, () => ({ x: Math.random() * 10_000, y: Math.random() * 10_000 })), 10_000);
-      const locs = Array.from({ length: 51 }, () => loc(Math.random() * 10_000, Math.random() * 10_000));
-      const expected = locs.map((l) => bruteNearest(l, gt)).sort((a, b) => a - b);
-      const out = computeEmpiricalPrecision(locs, gt);
-      expect(out.medianNm).toBeCloseTo(expected[25], 6);
-      expect(out.p90Nm).toBeCloseTo(expected[45], 6);
+  it('matches only supplied active truth and refuses mixed camera frames', () => {
+    const result = match([loc(900, 900)], [{ x: 100, y: 100 }]);
+    expect(result.matchedCount).toBe(0);
+    expect(result.falsePositiveCount).toBe(1);
+    expect(() => match([loc(100, 100, { frameIndex: 1 })], [{ x: 100, y: 100 }])).toThrow(/same camera frame/);
+  });
+
+  it('includes the matching gate boundary and excludes centers outside the sensor', () => {
+    const active = [{ x: 0, y: 100 }, { x: 1000, y: 100 }, { x: -1, y: 100 }];
+    const result = match([loc(10, 100), loc(1000, 100)], active);
+    expect(result.matchedCount).toBe(1);
+    expect(result.activeEmitterFrames).toBe(1);
+    expect(result.falsePositiveCount).toBe(1);
+    expect(result.squaredErrorSumNm2).toBe(100);
+  });
+
+  it.each([0, -1, Infinity, NaN])('rejects invalid matching gate %s', (gate) => {
+    expect(() => match([], [], gate)).toThrow(/finite and positive/);
+  });
+
+  it('agrees with exhaustive matching on seeded rectangular problems', () => {
+    let seed = 37;
+    const random = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 2 ** 32);
+    for (let n = 1; n <= 4; n++) {
+      for (let m = 1; m <= 4; m++) {
+        for (let trial = 0; trial < 6; trial++) {
+          const detections = Array.from({ length: n }, () => loc(100 + random() * 30, 100 + random() * 30));
+          const active = Array.from({ length: m }, () => ({ x: 100 + random() * 30, y: 100 + random() * 30 }));
+          const expected = bruteMatch(detections, active, 15);
+          const actual = match(detections, active, 15);
+          expect(actual.matchedCount).toBe(expected.count);
+          expect(actual.squaredErrorSumNm2).toBeCloseTo(expected.squared, 8);
+          expect(actual.falsePositiveCount).toBe(n - expected.count);
+        }
+      }
     }
   });
-
-  it('scales linearly with localization noise', () => {
-    const emitters = Array.from({ length: 2000 }, (_, i) => ({ x: 500 + ((i * 37) % 9000), y: 500 + ((i * 53) % 9000) }));
-    const gt = truth(emitters, 10_000);
-    const noisy = (scale: number) => emitters.map((e) => loc(e.x + (Math.random() - 0.5) * scale, e.y + (Math.random() - 0.5) * scale));
-    const ratio = computeEmpiricalPrecision(noisy(4), gt).medianNm / computeEmpiricalPrecision(noisy(2), gt).medianNm;
-    // Ratio SE ≈ 1.6 % with 2000 points; ±7.5 % is >4σ.
-    expect(ratio).toBeGreaterThan(1.85);
-    expect(ratio).toBeLessThan(2.15);
-  });
 });
 
-describe('computeDetectionEfficiency', () => {
-  it('is 0 with no ON events', () => {
-    expect(computeDetectionEfficiency(5, 0)).toBe(0);
+describe('localization measurement summaries', () => {
+  it('reports matched per-axis RMS, misses, and false positives as separate quantities', () => {
+    const result = summarizeMatches({
+      matchedCount: 2, activeEmitterFrames: 4, falsePositiveCount: 1, squaredErrorSumNm2: 25 + 9,
+    }, 130);
+    expect(result).toEqual({
+      rmsPerAxisErrorNm: Math.sqrt(34 / 4),
+      matchedCount: 2, activeEmitterFrames: 4, missedCount: 2, falsePositiveCount: 1,
+      detectionRecall: 0.5, falsePositiveRate: 1 / 3, matchRadiusNm: 130,
+    });
   });
-  it('is the ratio of localizations to ON events', () => {
-    expect(computeDetectionEfficiency(80, 100)).toBe(0.8);
-    expect(computeDetectionEfficiency(100, 100)).toBe(1);
+
+  it('does not turn no detections into zero localization error', () => {
+    const result = summarizeMatches(match([], [{ x: 100, y: 100 }]), 10);
+    expect(result.rmsPerAxisErrorNm).toBeNull();
+    expect(result.missedCount).toBe(1);
+    expect(result.detectionRecall).toBe(0);
+    expect(result.falsePositiveRate).toBeNull();
+  });
+
+  it('reports false fits even when no emitter was active', () => {
+    const result = summarizeMatches(match([loc(100, 100)], []), 10);
+    expect(result.rmsPerAxisErrorNm).toBeNull();
+    expect(result.detectionRecall).toBeNull();
+    expect(result.falsePositiveRate).toBe(1);
+  });
+
+  it('leaves both rates unavailable when neither activity nor fits exist', () => {
+    const result = summarizeMatches(match([], []), 10);
+    expect(result.rmsPerAxisErrorNm).toBeNull();
+    expect(result.detectionRecall).toBeNull();
+    expect(result.falsePositiveRate).toBeNull();
   });
 });
