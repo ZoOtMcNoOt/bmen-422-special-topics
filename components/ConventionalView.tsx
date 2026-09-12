@@ -38,7 +38,9 @@ export function ConventionalView({ truth, view, psfSigmaNm }: {
         <canvas
           ref={canvas}
           role="img"
-          aria-label={`Ideal conventional fluorescence image of all emitters, with a ${psfSigmaNm} nm Gaussian PSF sigma and no noise or drift`}
+          aria-label={truth
+            ? `Ideal conventional fluorescence image of all emitters, with a ${psfSigmaNm} nm Gaussian PSF sigma and no noise or drift`
+            : 'No sample selected for the conventional microscope'}
         />
         <FieldScale view={view} />
         {!truth && <div className="empty-field">Choose a sample</div>}

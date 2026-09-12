@@ -291,10 +291,12 @@ export function ObservationPanel({
               <h3>STORM camera</h3>
               <span>
                 {cameraView === 'mean'
-                  ? `Mean of ${framesCompleted.toLocaleString()} frames`
+                  ? framesCompleted
+                    ? `Mean of ${framesCompleted.toLocaleString()} frames`
+                    : 'Not acquired'
                   : shownFrame
                     ? `Frame ${shownFrame}`
-                    : 'Not acquired'}
+                    : framesCompleted ? 'Before frame 1' : 'Not acquired'}
               </span>
             </figcaption>
             <div className="microscopy-field reference-field">
@@ -303,8 +305,12 @@ export function ObservationPanel({
                 role="img"
                 aria-label={
                   cameraView === 'mean'
-                    ? `Mean of all ${framesCompleted} acquired camera frames`
-                    : `Simulated camera image for frame ${shownFrame}`
+                    ? framesCompleted
+                      ? `Mean of all ${framesCompleted} acquired camera frames`
+                      : 'No acquired camera frames to average'
+                    : shownFrame
+                      ? `Simulated camera image for frame ${shownFrame}`
+                      : 'No camera frame selected'
                 }
               />
               <FieldScale view={view} />
