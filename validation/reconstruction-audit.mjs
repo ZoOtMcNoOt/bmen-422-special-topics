@@ -18,6 +18,24 @@ const externalRequire = createRequire(path.join(ROOT, 'package.json'));
 const sha256 = value => createHash('sha256').update(value).digest('hex');
 const sourceHash = text => sha256(text.replaceAll('\r\n', '\n'));
 const git = (...args) => execFileSync('git', args, { cwd: ROOT, encoding: 'utf8' });
+const CHECKOUT_HEAD = git('rev-parse', 'HEAD').trim();
+
+/** Classify the loaded model bytes, independently of unrelated working-tree edits. */
+function currentSourceProvenance(sourceHashes) {
+  const committedFiles = new Set(git('ls-tree', '-r', '--name-only', '-z', CHECKOUT_HEAD, '--', ...Object.keys(sourceHashes)).split('\0'));
+  const changedSourceFiles = Object.entries(sourceHashes).filter(([filename, hash]) => {
+    // An absent commit path is a new source. Other Git failures must fail the audit.
+    return !committedFiles.has(filename) || sourceHash(git('show', `${CHECKOUT_HEAD}:${filename}`)) !== hash;
+  }).map(([filename]) => filename).sort();
+  const matchesCommit = changedSourceFiles.length === 0;
+  return {
+    kind: matchesCommit ? 'git-commit' : 'working-tree',
+    revision: matchesCommit ? CHECKOUT_HEAD : null,
+    baseRevision: CHECKOUT_HEAD,
+    changedSourceFiles,
+    sourceHashes: { ...sourceHashes },
+  };
+}
 
 /** Separate CommonJS module graphs keep the historical and current implementations isolated. */
 function sourceLoader(revision = null) {
@@ -148,21 +166,21 @@ function summarize(acquisition, kind, truth, view) {
 }
 
 const report = {
-  baselineRevision: BASELINE, currentHead: git('rev-parse', 'HEAD').trim(),
+  baselineRevision: BASELINE, checkoutHead: CHECKOUT_HEAD, currentSource: null,
   nodeVersion: process.version, typescriptVersion: ts.version,
   auditSha256: sourceHash(readFileSync(fileURLToPath(import.meta.url), 'utf8')),
   seeds: SEEDS, params: DEFAULT_PARAMS,
   method: {
     rng: 'Current seededRandom: label stream seed; independent acquisition stream seed XOR 0xa5a5a5a5, matching the app.',
     pairing: 'Same GroundTruth object and seed supplied to both runSimulation versions. SHA256 over every raw Float32 camera pixel verifies identical observations.',
-    provenance: 'Source and audit-script SHA256 hashes normalize CRLF line endings to LF; no other whitespace is changed. Camera hashes cover unmodified binary pixels.',
+    provenance: 'checkoutHead is captured before loading model source. After the audit, every loaded current source hash is compared with that path at checkoutHead: all matches identify a git-commit; changed or new paths identify a working-tree with no revision claim. currentSource.sourceHashes identify the loaded model bytes. Source and audit-script SHA256 hashes normalize CRLF line endings to LF; no other whitespace is changed. Camera hashes cover unmodified binary pixels.',
     acceptance: 'Every current default case must have finite matched RMS/axis below 4 nm, zero unmatched fits, recall at least 50%, and at least 99% of accepted fits within 10 nm of ideal geometry. Crowded controls are diagnostic and exempt.',
     errors: 'Maximum-cardinality minimum-distance one-to-one matching to active truth in the same frame, inclusive one-PSF-sigma gate. RMS per axis is conditional on matched fits.',
     shape: 'Distance to ideal continuous lines, circle, actin segments, or visible image rectangle; not an image-resolution measurement.',
     sampling: 'labelsEverOn counts illuminated labels, including ones missed/rejected by the fitter; it is not unique resolved-molecule coverage.',
     calibration: 'Both engines see equal per-emitter mean brightness. The current quality gates use that known photon mean and known background/PSF; experimental brightness variation is outside this audit.',
   },
-  sourceHashes: { historical: historical.hashes, current: current.hashes },
+  historicalSourceHashes: historical.hashes,
   imageFixture: { sourceSize: { width: thinImage.width, height: thinImage.height }, bufferSize: { width: 256, height: 1 }, visiblePixelColumns: [64, 192], supportNm: imageSupport, labeling: [] },
   cases: [], checks: { identicalCameraPixels: true, allDefaultLabelsInView: true, currentImageLabelsInsideVisibleSupport: true, defaultReconstructionQuality: true, currentSourcesStable: null },
 };
@@ -224,6 +242,7 @@ try {
   }
   for (const kind of ['two-lines', 'ring', 'actin']) await compare(kind, 10000, 42, 'legacy-density-control');
   report.checks.currentSourcesStable = Object.entries(current.hashes).every(([filename, hash]) => sourceHash(readFileSync(path.join(ROOT, filename), 'utf8')) === hash);
+  report.currentSource = currentSourceProvenance(current.hashes);
   save();
   assert.ok(report.checks.currentSourcesStable, 'Current source changed during the audit; rerun against stable files');
   console.log(`Saved ${report.cases.length} paired acquisitions to ${path.relative(ROOT, outputPath)}`);
