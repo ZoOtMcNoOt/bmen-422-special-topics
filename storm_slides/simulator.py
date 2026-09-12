@@ -6,8 +6,8 @@ The sensor therefore covers [-0.5, width-0.5) by [-0.5, height-0.5).
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import replace
-from typing import Iterable
 
 import numpy as np
 from scipy.ndimage import maximum_filter

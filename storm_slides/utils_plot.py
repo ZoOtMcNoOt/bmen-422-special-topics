@@ -10,7 +10,6 @@ import numpy as np
 
 from storm_slides.models import SweepResult
 
-
 # ------------------------------------------------------------------
 # Pure-numpy helpers (always available, even without Manim)
 # ------------------------------------------------------------------
