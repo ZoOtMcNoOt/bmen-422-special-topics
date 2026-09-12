@@ -16,6 +16,8 @@ export type LabCameraOptions = LabCanvasOptions & {
   /** Provide both values to crop the sensor to the same physical field as the clouds. */
   view?: ViewBox;
   pixelSizeNm?: number;
+  /** Interpolate an oversampled optical preview; acquired camera pixels stay sharp by default. */
+  smooth?: boolean;
 };
 
 export type LabViewport = {
@@ -245,7 +247,7 @@ export function drawCameraPreview(
   const camera = cached.camera;
   camera.image.data.set(colorizeLabCamera(pixels));
   camera.context.putImageData(camera.image, 0, 0);
-  ctx.imageSmoothingEnabled = false;
+  ctx.imageSmoothingEnabled = options.smooth === true;
   if (crop) {
     // Preserve fractional source-pixel offsets. Regions beyond the camera remain
     // navy, with the visible portion occupying its true position in the nm view.

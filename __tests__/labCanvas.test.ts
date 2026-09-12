@@ -117,6 +117,16 @@ describe('original lab display geometry and palette', () => {
     expect(target.context.imageSmoothingEnabled).toBe(false);
   });
 
+  it('smoothly scales an optical preview, then restores unsmoothed camera sampling', () => {
+    const target = canvasHarness(400, 200);
+    const pixels = new Uint8Array(48 * 48);
+    drawCameraPreview(target.canvas, pixels, 48, 48, { smooth: true });
+    expect(target.context.imageSmoothingEnabled).toBe(true);
+    expect(target.context.drawImage).toHaveBeenLastCalledWith(target.created[0].canvas, 100, 0, 200, 200);
+    drawCameraPreview(target.canvas, pixels, 48, 48);
+    expect(target.context.imageSmoothingEnabled).toBe(false);
+  });
+
   it('keeps off-sensor portions blank without stretching the visible crop', () => {
     const target = canvasHarness(400, 200);
     drawCameraPreview(target.canvas, new Uint8Array(64 * 64), 64, 64, {

@@ -10,6 +10,8 @@ import { pickScaleBar } from '@/lib/rendering/scaleBar';
 import { computeDriftAtFrame } from '@/lib/simulator/drift';
 import { locsThroughFrame } from '@/lib/timeline';
 import { downloadBlob } from '@/lib/export';
+import { ConventionalView } from './ConventionalView';
+import { FieldScale } from './FieldScale';
 import type { LiveUpdate } from '@/lib/simulator/runSimulation';
 import type {
   GroundTruth,
@@ -46,7 +48,7 @@ export function ObservationPanel({
 }: Props) {
   const cloud = useRef<HTMLCanvasElement>(null);
   const camera = useRef<HTMLCanvasElement>(null);
-  const mean = useRef<HTMLCanvasElement>(null);
+  const [cameraView, setCameraView] = useState<'frame' | 'mean'>('frame');
   const [showTruth, setShowTruth] = useState(false);
   const [scrubFrame, setScrubFrame] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -107,15 +109,20 @@ export function ObservationPanel({
       );
     const options = { view, pixelSizeNm: params.pixelSizeNm };
     if (camera.current)
-      drawCameraPreview(camera.current, selectedCamera, width, height, options);
-    if (mean.current)
-      drawCameraPreview(mean.current, widefield, width, height, options);
+      drawCameraPreview(
+        camera.current,
+        cameraView === 'mean' ? widefield : selectedCamera,
+        width,
+        height,
+        options,
+      );
   }, [
     showTruth,
     truth,
     positions,
     view,
     selectedCamera,
+    cameraView,
     widefield,
     width,
     height,
@@ -125,7 +132,7 @@ export function ObservationPanel({
   useEffect(() => {
     draw();
     const observer = new ResizeObserver(draw);
-    for (const ref of [cloud, camera, mean])
+    for (const ref of [cloud, camera])
       if (ref.current) observer.observe(ref.current);
     return () => observer.disconnect();
   }, [draw]);
@@ -204,7 +211,7 @@ export function ObservationPanel({
       <div className="image-grid">
         <figure className="image-panel reconstruction-panel">
           <figcaption>
-            <h3>{showTruth ? 'Ground truth' : 'Reconstruction'}</h3>
+            <h3>{showTruth ? 'Ground truth' : 'STORM reconstruction'}</h3>
             <span>
               {showTruth
                 ? `${truth?.emitters.length.toLocaleString() ?? 0} emitters`
@@ -274,36 +281,55 @@ export function ObservationPanel({
           </div>
         </figure>
         <div className="reference-views">
+          <ConventionalView
+            truth={truth}
+            view={view}
+            psfSigmaNm={params.psfSigmaNm}
+          />
           <figure className="image-panel">
             <figcaption>
-              <h3>Camera frame</h3>
-              <span>{shownFrame ? `Frame ${shownFrame}` : 'Not acquired'}</span>
+              <h3>STORM camera</h3>
+              <span>
+                {cameraView === 'mean'
+                  ? `Mean of ${framesCompleted.toLocaleString()} frames`
+                  : shownFrame
+                    ? `Frame ${shownFrame}`
+                    : 'Not acquired'}
+              </span>
             </figcaption>
             <div className="microscopy-field reference-field">
               <canvas
                 ref={camera}
                 role="img"
-                aria-label={`Simulated camera image for frame ${shownFrame}`}
+                aria-label={
+                  cameraView === 'mean'
+                    ? `Mean of all ${framesCompleted} acquired camera frames`
+                    : `Simulated camera image for frame ${shownFrame}`
+                }
               />
               <FieldScale view={view} />
             </div>
-          </figure>
-          <figure className="image-panel">
-            <figcaption>
-              <h3>Widefield</h3>
-              <span>
-                {framesCompleted
-                  ? `Mean of ${framesCompleted.toLocaleString()} frames`
-                  : 'Not acquired'}
-              </span>
-            </figcaption>
-            <div className="microscopy-field reference-field">
-              <canvas
-                ref={mean}
-                role="img"
-                aria-label={`Mean of all ${framesCompleted} acquired camera frames`}
-              />
-              <FieldScale view={view} />
+            <div className="view-options camera-options">
+              <div
+                className="segmented-control"
+                role="group"
+                aria-label="STORM camera view"
+              >
+                <button
+                  aria-label="Single frame"
+                  aria-pressed={cameraView === 'frame'}
+                  onClick={() => setCameraView('frame')}
+                >
+                  Frame
+                </button>
+                <button
+                  aria-label="All-frame mean"
+                  aria-pressed={cameraView === 'mean'}
+                  onClick={() => setCameraView('mean')}
+                >
+                  Mean
+                </button>
+              </div>
             </div>
           </figure>
         </div>
@@ -393,25 +419,6 @@ export function ObservationPanel({
         </div>
       </dl>
     </>
-  );
-}
-
-function FieldScale({ view }: { view: ViewBox }) {
-  const bar = pickScaleBar(view.sizeNm);
-  return (
-    <div className="field-bottom">
-      <span
-        className="field-scale"
-        style={{ width: `calc(var(--field-side, 100px) * ${bar.fraction})` }}
-      >
-        <i />
-        {bar.label}
-      </span>
-      <span>
-        {(view.sizeNm / 1000).toLocaleString()} ×{' '}
-        {(view.sizeNm / 1000).toLocaleString()} µm
-      </span>
-    </div>
   );
 }
 
