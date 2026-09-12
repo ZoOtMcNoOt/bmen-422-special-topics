@@ -57,6 +57,8 @@ export default function Page() {
     null,
   );
   const [running, setRunning] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+  const initialRunStarted = useRef(false);
   const [live, setLive] = useState<LiveAcquisition | null>(null);
   const [runId, setRunId] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -75,6 +77,7 @@ export default function Page() {
       setDensity(s.densityPerUm2);
     }
     restored.current = true;
+    setHydrated(true);
   }, []);
   useEffect(() => {
     if (!restored.current) return;
@@ -160,6 +163,12 @@ export default function Page() {
       setRunning(false);
     }
   }, [groundTruth, params, preset, draftView, running]);
+
+  useEffect(() => {
+    if (!hydrated || !groundTruth || initialRunStarted.current) return;
+    initialRunStarted.current = true;
+    void start();
+  }, [hydrated, groundTruth, start]);
 
   const copyLink = async () => {
     const url = `${window.location.origin}${window.location.pathname}?${encodeState({ params, preset, densityPerUm2 })}`;
