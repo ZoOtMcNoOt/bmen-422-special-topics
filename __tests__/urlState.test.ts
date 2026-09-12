@@ -18,6 +18,15 @@ const state: ShareableState = {
 };
 
 describe('url-state', () => {
+  it.each(['-1', '1000000000', 'Infinity', '1e309', '200oops', '200.5'])('rejects unsafe frame count %s', value => {
+    expect(decodeState(`?frames=${value}`, DEFAULT_PARAMS).params.nFrames).toBe(DEFAULT_PARAMS.nFrames);
+  });
+
+  it('bounds noise, photons, density, drift and transition probabilities', () => {
+    const decoded = decodeState('?N=-20&b=-1&density=999999&drift=99&duty=5', DEFAULT_PARAMS);
+    expect(decoded.params).toEqual(DEFAULT_PARAMS);
+    expect(decoded.densityPerUm2).toBe(250);
+  });
   it('round-trips every field, including zeros and full float precision', () => {
     expect(decodeState(encodeState(state), DEFAULT_PARAMS)).toEqual(state);
   });

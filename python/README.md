@@ -1,4 +1,6 @@
-# STORM Lab
+# Python reference and presentation
+
+This folder preserves the Python scientific engine, local lab, and 17-scene Manim deck in the same repository as the website. The primary browser app is at the repository root and is hosted at [STORM simulator](https://zootmcnoot.github.io/bmen-422-special-topics/). Run the commands below from this `python/` directory.
 
 An interactive microscopy lab for **stochastic optical reconstruction microscopy**. Choose a synthetic specimen, simulate blinking molecules, and compare noisy camera frames with a reconstruction of their fitted positions.
 

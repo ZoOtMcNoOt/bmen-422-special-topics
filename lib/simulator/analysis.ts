@@ -1,72 +1,137 @@
-import { clamp, median } from '@/lib/utils';
-import type { GroundTruth, Localization } from './types';
+import type { Emitter, Localization, LocalizationMetrics } from './types';
 
-/** Grid cells are never narrower than this, so sparse fields don't allocate huge grids. */
-const MIN_CELL_NM = 50;
+/** Sufficient statistics accumulated across frames, without retaining active masks. */
+export type MatchTotals = {
+  matchedCount: number;
+  activeEmitterFrames: number;
+  falsePositiveCount: number;
+  squaredErrorSumNm2: number;
+};
 
 /**
- * Median and p90 distance from each localization to its nearest true emitter.
- * A direct, ground-truth-referenced precision — unlike the Thompson estimate
- * it grows when overlapping molecules are merged into one detection.
- *
- * Emitters are bucketed into a uniform grid sized for ~1 per cell (but at
- * least MIN_CELL_NM wide). Each query spirals outward ring by ring and stops
- * once the best distance found is no larger than the distance to the nearest
- * unvisited ring, which guarantees exactness.
+ * Rectangular Hungarian assignment; rows <= columns and all costs are finite.
+ * Returns a distinct column for each row, minimizing total cost.
  */
-export function computeEmpiricalPrecision(
-  localizations: readonly Localization[],
-  groundTruth: GroundTruth
-): { medianNm: number; p90Nm: number } {
-  const { emitters, fieldSizeNm } = groundTruth;
-  if (localizations.length === 0 || emitters.length === 0) return { medianNm: 0, p90Nm: 0 };
+function minimumCostAssignment(costs: readonly Float64Array[]): Int32Array {
+  const rowCount = costs.length;
+  const columnCount = costs[0].length;
+  const rowPotential = new Float64Array(rowCount + 1);
+  const columnPotential = new Float64Array(columnCount + 1);
+  const assignedRow = new Int32Array(columnCount + 1);
+  const predecessor = new Int32Array(columnCount + 1);
 
-  const cellNm = Math.max(MIN_CELL_NM, Math.sqrt((fieldSizeNm.width * fieldSizeNm.height) / emitters.length));
-  const nCols = Math.max(1, Math.ceil(fieldSizeNm.width / cellNm));
-  const nRows = Math.max(1, Math.ceil(fieldSizeNm.height / cellNm));
-  const cellOf = (v: number, n: number) => clamp(Math.floor(v / cellNm), 0, n - 1);
-
-  const grid: number[][] = Array.from({ length: nCols * nRows }, () => []);
-  emitters.forEach((e, i) => grid[cellOf(e.y, nRows) * nCols + cellOf(e.x, nCols)].push(i));
-
-  const maxRing = Math.max(nCols, nRows);
-  const dists = new Float64Array(localizations.length);
-
-  for (let i = 0; i < localizations.length; i++) {
-    const l = localizations[i];
-    const gx = cellOf(l.x, nCols);
-    const gy = cellOf(l.y, nRows);
-    let best = Infinity;
-
-    for (let r = 0; r <= maxRing; r++) {
-      const xLow = Math.max(0, gx - r);
-      const xHigh = Math.min(nCols - 1, gx + r);
-      const yLow = Math.max(0, gy - r);
-      const yHigh = Math.min(nRows - 1, gy + r);
-      for (let cy = yLow; cy <= yHigh; cy++) {
-        const onEdgeRow = cy === gy - r || cy === gy + r;
-        for (let cx = xLow; cx <= xHigh; cx++) {
-          if (!onEdgeRow && cx !== gx - r && cx !== gx + r) continue;
-          for (const idx of grid[cy * nCols + cx]) {
-            const dx = emitters[idx].x - l.x;
-            const dy = emitters[idx].y - l.y;
-            const d2 = dx * dx + dy * dy;
-            if (d2 < best) best = d2;
-          }
+  for (let row = 1; row <= rowCount; row++) {
+    assignedRow[0] = row;
+    const minCost = new Float64Array(columnCount + 1).fill(Infinity);
+    const visited = new Uint8Array(columnCount + 1);
+    let column = 0;
+    do {
+      visited[column] = 1;
+      const currentRow = assignedRow[column];
+      let delta = Infinity;
+      let nextColumn = 0;
+      for (let candidate = 1; candidate <= columnCount; candidate++) {
+        if (visited[candidate]) continue;
+        const reduced = costs[currentRow - 1][candidate - 1] - rowPotential[currentRow] - columnPotential[candidate];
+        if (reduced < minCost[candidate]) {
+          minCost[candidate] = reduced;
+          predecessor[candidate] = column;
+        }
+        if (minCost[candidate] < delta) {
+          delta = minCost[candidate];
+          nextColumn = candidate;
         }
       }
-      // Everything within Chebyshev ring r is visited; nothing unvisited can be
-      // closer than r·cellNm (the query lies inside its own cell).
-      if (best <= (r * cellNm) ** 2) break;
-    }
-    dists[i] = Math.sqrt(best);
+      for (let candidate = 0; candidate <= columnCount; candidate++) {
+        if (visited[candidate]) {
+          rowPotential[assignedRow[candidate]] += delta;
+          columnPotential[candidate] -= delta;
+        } else {
+          minCost[candidate] -= delta;
+        }
+      }
+      column = nextColumn;
+    } while (assignedRow[column] !== 0);
+
+    do {
+      const previous = predecessor[column];
+      assignedRow[column] = assignedRow[previous];
+      column = previous;
+    } while (column !== 0);
   }
 
-  dists.sort();
-  return { medianNm: median(dists), p90Nm: dists[Math.floor(dists.length * 0.9)] };
+  const assignment = new Int32Array(rowCount);
+  for (let column = 1; column <= columnCount; column++) {
+    if (assignedRow[column]) assignment[assignedRow[column] - 1] = column - 1;
+  }
+  return assignment;
 }
 
-/** Localizations per ON-emitter-frame event; < 1 when the detector merges neighbours. */
-export function computeDetectionEfficiency(nLocalizations: number, nOnEvents: number): number {
-  return nOnEvents === 0 ? 0 : nLocalizations / nOnEvents;
+/**
+ * Match fits to ACTIVE emitter centers in this camera frame, including its drift.
+ * Centers outside [0,width) x [0,height) are excluded from the observable truth.
+ * First maximize the number of pairs within the inclusive finite gate, then
+ * minimize their total Euclidean distance. Every fit and emitter is used at most once.
+ */
+export function matchFrameLocalizations(
+  localizations: readonly Localization[],
+  activeEmitters: readonly Emitter[],
+  frameIndex: number,
+  fieldSizeNm: { width: number; height: number },
+  matchRadiusNm: number
+): MatchTotals {
+  if (!Number.isFinite(matchRadiusNm) || matchRadiusNm <= 0) {
+    throw new RangeError('The localization matching radius must be finite and positive');
+  }
+  if (localizations.some((l) => l.frameIndex !== frameIndex)) {
+    throw new Error('Localization matching requires detections from the same camera frame');
+  }
+  const truth = activeEmitters.filter((e) =>
+    e.x >= 0 && e.x < fieldSizeNm.width && e.y >= 0 && e.y < fieldSizeNm.height
+  );
+  const totals: MatchTotals = {
+    matchedCount: 0,
+    activeEmitterFrames: truth.length,
+    falsePositiveCount: localizations.length,
+    squaredErrorSumNm2: 0,
+  };
+  if (!truth.length || !localizations.length) return totals;
+
+  // The smaller set forms the rows. Normalized valid costs are <= 1; one
+  // invalid edge costs more than every valid edge combined, enforcing cardinality.
+  const rows = localizations.length <= truth.length ? localizations : truth;
+  const columns = localizations.length <= truth.length ? truth : localizations;
+  const unmatchedCost = rows.length + 1;
+  const distances = rows.map((row) => Float64Array.from(columns, (column) =>
+    Math.hypot(row.x - column.x, row.y - column.y)
+  ));
+  const costs = distances.map((row) => Float64Array.from(row, (distance) =>
+    distance <= matchRadiusNm ? distance / matchRadiusNm : unmatchedCost
+  ));
+  const assignment = minimumCostAssignment(costs);
+  for (let row = 0; row < assignment.length; row++) {
+    const distance = distances[row][assignment[row]];
+    if (distance > matchRadiusNm || !Number.isFinite(distance)) continue;
+    totals.matchedCount++;
+    totals.squaredErrorSumNm2 += distance * distance;
+  }
+  totals.falsePositiveCount -= totals.matchedCount;
+  return totals;
+}
+
+/** Per-axis RMS on matched pairs; detection errors expose excluded observations. */
+export function summarizeMatches(totals: MatchTotals, matchRadiusNm: number): LocalizationMetrics {
+  const detections = totals.matchedCount + totals.falsePositiveCount;
+  return {
+    rmsPerAxisErrorNm: totals.matchedCount
+      ? Math.sqrt(totals.squaredErrorSumNm2 / (2 * totals.matchedCount))
+      : null,
+    matchedCount: totals.matchedCount,
+    activeEmitterFrames: totals.activeEmitterFrames,
+    missedCount: totals.activeEmitterFrames - totals.matchedCount,
+    falsePositiveCount: totals.falsePositiveCount,
+    detectionRecall: totals.activeEmitterFrames ? totals.matchedCount / totals.activeEmitterFrames : null,
+    falsePositiveRate: detections ? totals.falsePositiveCount / detections : null,
+    matchRadiusNm,
+  };
 }

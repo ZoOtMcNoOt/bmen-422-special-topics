@@ -13,6 +13,7 @@ import numpy as np
 from scipy.ndimage import maximum_filter
 from scipy.optimize import linear_sum_assignment, minimize
 from scipy.special import ndtr, xlogy
+from scipy.stats import binom
 
 from storm_slides.models import (
     DetectionThreshold,
@@ -213,6 +214,39 @@ def _empty_localizations() -> LocalizationResult:
     )
 
 
+def _has_significant_signal(
+    patch: np.ndarray,
+    candidate_in_patch: tuple[int, int],
+    core_radius: int,
+    frame_pixel_count: int,
+) -> bool:
+    """Reject background peaks with a one-sided conditional Poisson test.
+
+    Under uniform independent Poisson background, conditioning on the patch's
+    total count makes the central aperture count binomial, with probability
+    equal to its fraction of the observed pixels. Sensor cropping therefore
+    needs no inferred or padded counts. Bonferroni correction over all camera
+    pixels bounds the chance of any background detection in a frame by 1%,
+    including the data-dependent choice of local maxima. This is a per-frame
+    bound for that noise model, not a guarantee for an entire acquisition.
+    """
+    x, y = candidate_in_patch
+    core = patch[
+        max(0, y - core_radius) : y + core_radius + 1,
+        max(0, x - core_radius) : x + core_radius + 1,
+    ]
+    if core.size == patch.size:
+        return False
+    # Photon realizations are integers after gain calibration. Conservatively
+    # round fractional expected-count frames used for noiseless validation.
+    total_count = int(np.ceil(patch.sum()))
+    core_count = int(np.floor(core.sum()))
+    fraction = core.size / patch.size
+    if core_count <= total_count * fraction:
+        return False
+    return bool(binom.sf(core_count - 1, total_count, fraction) <= 0.01 / frame_pixel_count)
+
+
 def _fit_gaussian_patch(
     patch: np.ndarray,
     x_edges: np.ndarray,
@@ -325,6 +359,8 @@ def localize_spots_mle(
     Reported uncertainty is the per-axis RMS Fisher-information precision bound
     for this single-emitter model. Overlapping emitters violate that assumption.
     Border patches are cropped consistently with the forward imaging model.
+    A multiplicity-corrected conditional Poisson test rejects background peaks
+    before fitting; weak emitters may consequently be missed.
     """
     pixels = _photon_frame(frame, camera_gain)
     candidates = _xy_array(candidates_xy, "candidates_xy")
@@ -333,6 +369,7 @@ def localize_spots_mle(
     _finite_number("min_signal_photons", min_signal_photons, inclusive=True)
     radius = max(3, int(np.ceil(3 * psf_sigma_px))) if patch_radius is None else patch_radius
     _integer("patch_radius", radius, minimum=2)
+    core_radius = min(radius - 1, max(1, int(np.floor(1.5 * psf_sigma_px))))
     if len(candidates) == 0:
         return _empty_localizations()
     estimated = np.full((len(candidates), 2), np.nan)
@@ -348,6 +385,8 @@ def localize_spots_mle(
         y_min, y_max = max(0, y - radius), min(height - 1, y + radius)
         patch = pixels[y_min : y_max + 1, x_min : x_max + 1]
         if min(patch.shape) < 3 or float(patch.sum()) < min_signal_photons:
+            continue
+        if not _has_significant_signal(patch, (x - x_min, y - y_min), core_radius, pixels.size):
             continue
         fitted = _fit_gaussian_patch(
             patch,

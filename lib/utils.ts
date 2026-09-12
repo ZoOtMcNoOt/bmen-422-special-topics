@@ -14,7 +14,3 @@ export function median(values: ArrayLike<number>): number {
   const m = s.length >> 1;
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 }
-
-/** Base UI sliders emit `number | readonly number[]`; all of ours are single-thumb. */
-export const sliderValue = (v: number | readonly number[]): number =>
-  typeof v === 'number' ? v : v[0];

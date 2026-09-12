@@ -90,6 +90,43 @@ def test_poisson_background_has_expected_mean_and_variance() -> None:
 
 
 @pytest.mark.parametrize(
+    "background,shape,sigma",
+    [(2, (32, 32), 0.8), (20, (32, 32), 1.2), (80, (48, 64), 2.2)],
+)
+def test_random_poisson_background_peaks_are_rejected(
+    background: float, shape: tuple[int, int], sigma: float
+) -> None:
+    rng = np.random.default_rng(93817)
+    candidate_count = 0
+    for _ in range(40):
+        frame = rng.poisson(background, size=shape)
+        candidates = detect_spots(frame, DetectionThreshold(absolute_floor=0))
+        candidate_count += len(candidates)
+        result = localize_spots_mle(frame, candidates, sigma)
+        assert result.failure_flags.all()
+    # Exercise rejection after candidate selection, including low backgrounds
+    # that the default absolute photon threshold would remove entirely.
+    assert candidate_count > 0
+
+
+@pytest.mark.parametrize(
+    "position",
+    [(15.3, 14.7), (0.2, 14.7), (31.2, 14.7), (0.2, 0.2), (31.2, 31.2)],
+)
+def test_background_rejection_preserves_dim_and_sensor_edge_emitters(
+    position: tuple[float, float],
+) -> None:
+    truth = np.array([position])
+    rng = np.random.default_rng(49216)
+    for _ in range(40):
+        frame = render_frame_from_emitters((32, 32), truth, np.array([500.0]), 1.2, 20.0, rng)
+        result = localize_spots_mle(frame, detect_spots(frame), 1.2)
+        accepted = result.successful_xy()
+        assert len(accepted) == 1
+        assert np.linalg.norm(accepted[0] - truth[0]) < 1.0
+
+
+@pytest.mark.parametrize(
     "position,sigma,background",
     [
         ((15.05, 10.95), 0.8, 0.0),
