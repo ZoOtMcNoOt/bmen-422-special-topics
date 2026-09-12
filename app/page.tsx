@@ -20,17 +20,18 @@ import { DEFAULT_PARAMS, FIELD_SIZE_NM } from '@/lib/simulator/defaults';
 import { generateGroundTruth } from '@/lib/simulator/groundTruth';
 import { runSimulation, type LiveUpdate } from '@/lib/simulator/runSimulation';
 import {
-  DEFAULT_DENSITY_PER_UM2,
   DEFAULT_PRESET,
   PRESETS,
-  emitterCount,
   viewBoxFor,
   type PresetKind,
 } from '@/lib/presets';
 import { decodeState, encodeState } from '@/lib/url-state';
 import { downloadBlob, localizationCsv } from '@/lib/export';
+import { DEFAULT_SEED, seededRandom } from '@/lib/simulator/random';
+import type { DecodedImage } from '@/lib/rendering/canvas';
 import type {
   GroundTruth,
+  GroundTruthInput,
   SimulationParams,
   SimulationResult,
   ViewBox,
@@ -45,13 +46,17 @@ type DisplaySample = {
   view: ViewBox;
   preset: PresetKind;
   params: SimulationParams;
+  input: GroundTruthInput;
+  seed: number;
 };
 
 export default function Page() {
   const [params, setParams] = useState<SimulationParams>(DEFAULT_PARAMS);
   const [preset, setPreset] = useState<PresetKind>(DEFAULT_PRESET);
-  const [densityPerUm2, setDensity] = useState(DEFAULT_DENSITY_PER_UM2);
-  const [image, setImage] = useState<ImageData | null>(null);
+  const [moleculeCount, setMoleculeCount] = useState(PRESETS[DEFAULT_PRESET].defaultEmitters);
+  const [seed, setSeed] = useState(DEFAULT_SEED);
+  const [image, setImage] = useState<DecodedImage | null>(null);
+  const [decodingImage, setDecodingImage] = useState(false);
   const [result, setResult] = useState<SimulationResult | null>(null);
   const [displaySample, setDisplaySample] = useState<DisplaySample | null>(
     null,
@@ -74,7 +79,8 @@ export default function Page() {
       const s = decodeState(window.location.search, DEFAULT_PARAMS);
       setParams(s.params);
       setPreset(s.preset);
-      setDensity(s.densityPerUm2);
+      setMoleculeCount(s.moleculeCount);
+      setSeed(s.seed);
     }
     restored.current = true;
     setHydrated(true);
@@ -86,12 +92,12 @@ export default function Page() {
         window.history.replaceState(
           null,
           '',
-          `${window.location.pathname}?${encodeState({ params, preset, densityPerUm2 })}`,
+          `${window.location.pathname}?${encodeState({ params, preset, moleculeCount, seed })}`,
         ),
       300,
     );
     return () => clearTimeout(timer);
-  }, [params, preset, densityPerUm2]);
+  }, [params, preset, moleculeCount, seed]);
   useEffect(
     () => () => {
       abortRef.current?.abort();
@@ -100,29 +106,32 @@ export default function Page() {
     [],
   );
 
+  const specimenInput = useMemo(
+    () => PRESETS[preset].build(moleculeCount, image),
+    [preset, moleculeCount, image],
+  );
   const groundTruth = useMemo(() => {
-    const input = PRESETS[preset].build(emitterCount(densityPerUm2), image);
-    if (!input) return null;
+    if (!specimenInput) return null;
     try {
-      return generateGroundTruth(input, {
+      return generateGroundTruth(specimenInput, {
         width: FIELD_SIZE_NM,
         height: FIELD_SIZE_NM,
-      });
+      }, seededRandom(seed));
     } catch {
       return null;
     }
-  }, [preset, densityPerUm2, image]);
+  }, [specimenInput, seed]);
   const draftView = useMemo(
-    () => viewBoxFor(preset, groundTruth?.emitters),
-    [preset, groundTruth],
+    () => viewBoxFor(preset),
+    [preset],
   );
   const view = displaySample?.view ?? draftView;
 
   const start = useCallback(async () => {
-    if (!groundTruth || running) return;
+    if (!groundTruth || !specimenInput || running || decodingImage) return;
     const controller = new AbortController();
     abortRef.current = controller;
-    setDisplaySample({ truth: groundTruth, view: draftView, preset, params });
+    setDisplaySample({ truth: groundTruth, view: draftView, preset, params, input: specimenInput, seed });
     setRunning(true);
     setResult(null);
     setError(null);
@@ -131,6 +140,8 @@ export default function Page() {
     try {
       setResult(
         await runSimulation(groundTruth, params, {
+          // Keep image labelling and acquisition noise in independent repeatable streams.
+          rng: seededRandom(seed ^ 0xa5a5a5a5),
           onUpdate: (update) =>
             setLive((previous) => ({
               ...update,
@@ -162,16 +173,16 @@ export default function Page() {
       abortRef.current = null;
       setRunning(false);
     }
-  }, [groundTruth, params, preset, draftView, running]);
+  }, [groundTruth, specimenInput, params, preset, draftView, seed, running, decodingImage]);
 
   useEffect(() => {
-    if (!hydrated || !groundTruth || initialRunStarted.current) return;
+    if (!hydrated || !groundTruth || running || decodingImage || initialRunStarted.current) return;
     initialRunStarted.current = true;
     void start();
-  }, [hydrated, groundTruth, start]);
+  }, [hydrated, groundTruth, start, runId, running, decodingImage]);
 
   const copyLink = async () => {
-    const url = `${window.location.origin}${window.location.pathname}?${encodeState({ params, preset, densityPerUm2 })}`;
+    const url = `${window.location.origin}${window.location.pathname}?${encodeState({ params, preset, moleculeCount, seed })}`;
     try {
       await navigator.clipboard.writeText(url);
       setCopied('ok');
@@ -182,6 +193,14 @@ export default function Page() {
     copiedTimer.current = setTimeout(() => setCopied('idle'), 1800);
   };
   const framesCompleted = result?.framesCompleted ?? live?.framesCompleted ?? 0;
+  const resetObservation = () => {
+    initialRunStarted.current = false;
+    setDisplaySample(null);
+    setResult(null);
+    setLive(null);
+    setError(null);
+    setRunId((id) => id + 1);
+  };
   const displayedParams = displaySample?.params ?? params;
   const isStale =
     displaySample !== null &&
@@ -236,7 +255,7 @@ export default function Page() {
             onClick={() => {
               if (result)
                 downloadBlob(
-                  new Blob([localizationCsv(result)], {
+                  new Blob([localizationCsv(result, displaySample?.seed)], {
                     type: 'text/csv;charset=utf-8',
                   }),
                   'storm-localizations.csv',
@@ -259,8 +278,10 @@ export default function Page() {
                 aria-label="Reset experiment settings"
                 disabled={running}
                 onClick={() => {
+                  resetObservation();
                   setParams({ ...DEFAULT_PARAMS });
-                  setDensity(DEFAULT_DENSITY_PER_UM2);
+                  setMoleculeCount(PRESETS[DEFAULT_PRESET].defaultEmitters);
+                  setSeed(DEFAULT_SEED);
                   setPreset(DEFAULT_PRESET);
                 }}
               >
@@ -269,15 +290,26 @@ export default function Page() {
             </div>
             <PresetPicker
               value={preset}
-              onChange={setPreset}
-              onImageLoaded={setImage}
+              onChange={(next) => {
+                resetObservation();
+                setPreset(next);
+                setMoleculeCount(PRESETS[next].defaultEmitters);
+              }}
+              onImageLoaded={(nextImage) => {
+                resetObservation();
+                setImage(nextImage);
+              }}
+              decodingImage={decodingImage}
+              onDecodingChange={setDecodingImage}
               disabled={running}
             />
             <ControlPanel
               params={params}
               onChange={setParams}
-              densityPerUm2={densityPerUm2}
-              onDensityChange={setDensity}
+              moleculeCount={moleculeCount}
+              onMoleculeCountChange={setMoleculeCount}
+              seed={seed}
+              onSeedChange={setSeed}
               disabled={running}
             />
             <div>
@@ -293,7 +325,7 @@ export default function Page() {
               ) : (
                 <Button
                   onClick={start}
-                  disabled={!groundTruth}
+                  disabled={!groundTruth || decodingImage}
                   className="run-button"
                 >
                   <Play className="size-3 fill-current" />
@@ -301,7 +333,9 @@ export default function Page() {
                 </Button>
               )}
               <p className="mt-3 text-center text-[11px] text-muted-foreground">
-                {needsImage
+                {decodingImage
+                  ? 'Reading image…'
+                  : needsImage
                   ? 'Choose an image to run.'
                   : isStale
                     ? 'Settings changed. Run to update the images.'
@@ -337,6 +371,8 @@ export default function Page() {
             <ObservationPanel
               key={runId}
               truth={displaySample?.truth ?? groundTruth}
+              specimen={displaySample?.input ?? specimenInput}
+              seed={displaySample?.seed ?? seed}
               view={view}
               params={displayedParams}
               result={result}
@@ -380,8 +416,10 @@ export default function Page() {
             Two-state blinking, a known Gaussian point-spread function, and a
             Poisson noise model (a normal approximation for pixel means of 30 or
             more). Photon yield is per active molecule per frame. The
-            single-emitter fit assumes an isolated spot; overlapping molecules
-            can bias it.
+            single-emitter fit screens spot brightness and shape against this
+            model. It assumes the configured mean brightness is the same for
+            every molecule. Rejected spots reduce detection recall; dim or
+            overlapping molecules can still give biased fits.
           </p>
           <p>
             Fit error is RMS per axis for one-to-one matches to active emitters
@@ -418,8 +456,15 @@ export default function Page() {
           The conventional view sums the same Gaussian PSF over every emitter,
           with all emitters on. It shows the ideal fluorescence image before
           camera sampling, without noise, background, or drift. Its brightness is
-          normalized independently. All three views show the same physical crop;
+          normalized independently. All four views show the same physical crop;
           colors indicate intensity or position, not emission wavelength.
+        </p>
+        <p className="mb-5 text-xs text-muted-foreground">
+          The actual object is the known geometry or uploaded image. Molecules
+          shows its labels; the reconstruction contains only accepted camera
+          fits. Labels may blink repeatedly or remain unseen during a finite
+          acquisition. The same seed, settings, and source image reproduce the
+          same run. Shared links do not include uploaded images.
         </p>
         {notesOpen && <ThompsonPlot params={displayedParams} result={result} />}
         <p className="mt-5 text-xs text-muted-foreground">

@@ -15,7 +15,13 @@ export type GroundTruthInput =
   | { kind: 'two-lines'; separationNm: number; lengthNm: number; nPerLine: number }
   | { kind: 'ring'; diameterNm: number; nEmitters: number }
   | { kind: 'actin'; periodNm: number; rungLengthNm: number; nRungs: number; nPerRung: number }
-  | { kind: 'image'; imageData: ImageData; nEmitters: number };
+  | {
+    kind: 'image';
+    imageData: ImageData;
+    nEmitters: number;
+    /** Original dimensions retain the source aspect ratio after pixel downsampling. */
+    sourceSize?: { width: number; height: number };
+  };
 
 // ─── Acquisition ───────────────────────────────────────────────────────────
 

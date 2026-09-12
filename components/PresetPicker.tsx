@@ -2,11 +2,14 @@
 
 import { PRESETS, PRESET_KINDS, type PresetKind } from '@/lib/presets';
 import { PhotoUpload } from './PhotoUpload';
+import type { DecodedImage } from '@/lib/rendering/canvas';
 
 type Props = {
   value: PresetKind;
   onChange: (kind: PresetKind) => void;
-  onImageLoaded: (imageData: ImageData) => void;
+  onImageLoaded: (image: DecodedImage) => void;
+  decodingImage: boolean;
+  onDecodingChange: (decoding: boolean) => void;
   disabled: boolean;
 };
 
@@ -14,6 +17,8 @@ export function PresetPicker({
   value,
   onChange,
   onImageLoaded,
+  decodingImage,
+  onDecodingChange,
   disabled,
 }: Props) {
   return (
@@ -45,7 +50,7 @@ export function PresetPicker({
       </div>
       <p className="text-xs text-muted-foreground">{PRESETS[value].blurb}</p>
       {value === 'image' && (
-        <PhotoUpload onImageLoaded={onImageLoaded} disabled={disabled} />
+        <PhotoUpload onImageLoaded={onImageLoaded} disabled={disabled} decoding={decodingImage} onDecodingChange={onDecodingChange} />
       )}
     </section>
   );
@@ -76,11 +81,10 @@ function SampleIcon({ kind }: { kind: PresetKind }) {
       {kind === 'actin' && (
         <>
           <path
-            d="M10 9h30M10 16h30M10 23h30"
+            d="M10 8v16M17 8v16M24 8v16M31 8v16M38 8v16"
             strokeDasharray="1 3"
             strokeWidth="3"
           />
-          <path d="M14 5v23M36 5v23" opacity=".2" />
         </>
       )}
       {kind === 'image' && (

@@ -74,15 +74,22 @@ describe('numerical localization boundaries', () => {
     const rng = seededRandom(7624);
     let squaredError = 0;
     let predicted = 0;
+    let accepted = 0;
     const trials = 160;
     for (let trial = 0; trial < trials; trial++) {
       const found = localizeFrame(renderFrame([truth], p, trial, rng), p);
-      expect(found).toHaveLength(1);
+      expect(found.length).toBeLessThanOrEqual(1);
+      if (!found.length) continue;
+      accepted++;
       squaredError += distance(found[0], truth.x, truth.y) ** 2;
       predicted += found[0].sigmaLocNm;
     }
-    const empiricalPerAxisRms = Math.sqrt(squaredError / (2 * trials));
-    const ratio = (predicted / trials) / empiricalPerAxisRms;
+    // A statistical shape screen may reject an otherwise valid noise draw.
+    // Check retention as well as precision, so discarding difficult frames
+    // cannot make the estimator appear artificially accurate.
+    expect(accepted).toBeGreaterThanOrEqual(0.98 * trials);
+    const empiricalPerAxisRms = Math.sqrt(squaredError / (2 * accepted));
+    const ratio = (predicted / accepted) / empiricalPerAxisRms;
     // TLW is an approximation; this catches the former ~5x background-unit error.
     expect(ratio).toBeGreaterThan(0.65);
     expect(ratio).toBeLessThan(1.5);

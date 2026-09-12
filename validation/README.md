@@ -2,6 +2,8 @@
 
 The existing hosted TypeScript app remains the website. The Python code supplies a reference implementation, numerical tests, and the presentation. Neither implementation was uniformly better before consolidation.
 
+The later [reconstruction validation](reconstruction-2026-09-12.md) checks the corrected preset counts, fitter, complete-object framing, and transparent image sampling across three seeds. Its paired camera-pixel comparison and source hashes are recorded in [the full report](reconstruction-2026-09-12.json).
+
 ## Baseline, 12 September 2026
 
 Compared public commit `c62bdbe77288a2840d4f43c98565470dab39570f` with Python commit `2f52b31c76b245847eea3c01587dceea1080e88f`. Both received **identical camera pixels**, generated with NumPy seed 20260912: 32×32 pixels at 160 nm/pixel, pixel-integrated Gaussian spots and Poisson sampling. Coordinates were converted explicitly between the repositories' pixel-center conventions. Each ordinary condition uses 80 trials; edge and blank conditions use 20 each.

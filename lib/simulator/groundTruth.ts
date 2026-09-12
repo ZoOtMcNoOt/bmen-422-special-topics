@@ -2,15 +2,16 @@ import type { Emitter, GroundTruth, GroundTruthInput } from './types';
 
 type Field = { width: number; height: number };
 
-/** Rejection sampling gives up after this many draws per requested emitter. */
-const MAX_REJECTION_ATTEMPTS_PER_EMITTER = 1000;
-
-export function generateGroundTruth(input: GroundTruthInput, field: Field): GroundTruth {
+export function generateGroundTruth(
+  input: GroundTruthInput,
+  field: Field,
+  rng: () => number = Math.random,
+): GroundTruth {
   switch (input.kind) {
     case 'two-lines': return twoLines(input, field);
     case 'ring': return ring(input, field);
     case 'actin': return actin(input, field);
-    case 'image': return fromImage(input, field);
+    case 'image': return fromImage(input, field, rng);
   }
 }
 
@@ -61,39 +62,84 @@ function actin(
   return { emitters, fieldSizeNm: field, label: `Actin rings, ${periodNm} nm period` };
 }
 
+function visibleIntensity(data: Uint8ClampedArray, index: number): number {
+  const i = index * 4;
+  return (0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]) * data[i + 3] / 255;
+}
+
+/** Transparent RGB values contribute no signal to the uploaded specimen. */
+export function imageHasSignal(image: ImageData): boolean {
+  for (let i = 0; i < image.width * image.height; i++) {
+    if (visibleIntensity(image.data, i) > 0) return true;
+  }
+  return false;
+}
+
+/** Letterbox an image into the specimen field; all returned coordinates are nm. */
+export function imageBounds(sourceSize: Field, field: Field): { x0: number; y0: number; width: number; height: number } {
+  if (![sourceSize.width, sourceSize.height, field.width, field.height].every((v) => Number.isFinite(v) && v > 0)) {
+    throw new Error('Image and specimen field dimensions must be positive and finite');
+  }
+  const scale = Math.min(field.width / sourceSize.width, field.height / sourceSize.height);
+  const width = sourceSize.width * scale;
+  const height = sourceSize.height * scale;
+  return { x0: (field.width - width) / 2, y0: (field.height - height) / 2, width, height };
+}
+
 function fromImage(
-  { imageData, nEmitters }: Extract<GroundTruthInput, { kind: 'image' }>,
-  field: Field
+  { imageData, nEmitters, sourceSize }: Extract<GroundTruthInput, { kind: 'image' }>,
+  field: Field,
+  rng: () => number,
 ): GroundTruth {
   const { width, height, data } = imageData;
-
-  // Luminance normalised to peak 1 becomes the sampling probability.
-  const intensity = new Float32Array(width * height);
-  let peak = 0;
-  for (let i = 0; i < intensity.length; i++) {
-    const lum = (0.2126 * data[i * 4] + 0.7152 * data[i * 4 + 1] + 0.0722 * data[i * 4 + 2]) / 255;
-    intensity[i] = lum;
-    if (lum > peak) peak = lum;
+  const source = sourceSize ?? { width, height };
+  if (!Number.isSafeInteger(nEmitters) || nEmitters < 0) {
+    throw new Error('The requested emitter count must be a non-negative integer');
   }
-  if (peak === 0) throw new Error('Image has no bright pixels to sample from');
-  for (let i = 0; i < intensity.length; i++) intensity[i] /= peak;
+  if (![width, height, source.width, source.height].every((v) => Number.isSafeInteger(v) && v > 0)
+    || data.length !== width * height * 4) {
+    throw new Error('Image dimensions do not match its pixels');
+  }
+  // Retain physical aspect ratio even when the sampling buffer has a one-pixel side.
+  const bounds = imageBounds(source, field);
 
-  // Letterbox the image into the field, preserving aspect ratio.
-  const scale = Math.min(field.width / width, field.height / height);
-  const offsetX = (field.width - width * scale) / 2;
-  const offsetY = (field.height - height * scale) / 2;
+  // A cumulative distribution samples exactly nEmitters, including specimens
+  // consisting of a single visible pixel. Zero-weight pixels are never chosen.
+  const cumulative = new Float64Array(width * height);
+  let total = 0;
+  let lastVisiblePixel = -1;
+  for (let i = 0; i < cumulative.length; i++) {
+    const weight = visibleIntensity(data, i);
+    total += weight;
+    cumulative[i] = total;
+    if (weight > 0) lastVisiblePixel = i;
+  }
+  if (total === 0) throw new Error('Image has no bright pixels with non-zero opacity to sample from');
+
+  const draw = () => {
+    const value = rng();
+    if (!Number.isFinite(value) || value < 0 || value >= 1) {
+      throw new Error('The random generator must return values in [0, 1)');
+    }
+    return value;
+  };
 
   const emitters: Emitter[] = [];
-  const maxAttempts = nEmitters * MAX_REJECTION_ATTEMPTS_PER_EMITTER;
-  for (let attempts = 0; emitters.length < nEmitters && attempts < maxAttempts; attempts++) {
-    const px = Math.floor(Math.random() * width);
-    const py = Math.floor(Math.random() * height);
-    if (Math.random() < intensity[py * width + px]) {
-      emitters.push({
-        x: offsetX + (px + Math.random()) * scale,
-        y: offsetY + (py + Math.random()) * scale,
-      });
+  for (let i = 0; i < nEmitters; i++) {
+    const target = draw() * total;
+    let low = 0;
+    let high = lastVisiblePixel;
+    while (low < high) {
+      const mid = Math.floor((low + high) / 2);
+      if (cumulative[mid] <= target) low = mid + 1;
+      else high = mid;
     }
+    const px = low % width;
+    const py = Math.floor(low / width);
+    emitters.push({
+      x: bounds.x0 + ((px + draw()) / width) * bounds.width,
+      y: bounds.y0 + ((py + draw()) / height) * bounds.height,
+    });
   }
-  return { emitters, fieldSizeNm: field, label: `Uploaded image, ${emitters.length} emitters` };
+  return { emitters, fieldSizeNm: field, label: `Uploaded image, ${nEmitters} emitters` };
 }

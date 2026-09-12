@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  colorizeLabCamera, drawCameraPreview, drawLocalizationCloud, labViewport,
+  colorizeLabCamera, drawActualObject, drawCameraPreview, drawLocalizationCloud, labViewport,
 } from '@/lib/rendering/labCanvas';
+import { PRESETS, viewBoxFor } from '@/lib/presets';
+import { halfWhiteImage } from './fixtures';
 
 /** Minimal canvas recorder: geometry and buffers can be tested without a browser. */
 function canvasHarness(cssWidth = 400, cssHeight = 200, dpr = 1) {
@@ -18,7 +20,7 @@ function canvasHarness(cssWidth = 400, cssHeight = 200, dpr = 1) {
     const gradient = { addColorStop: vi.fn() };
     const context = {
       setTransform: vi.fn(), fillRect: vi.fn(), save: vi.fn(), restore: vi.fn(),
-      beginPath: vi.fn(), rect: vi.fn(), clip: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), stroke: vi.fn(),
+      beginPath: vi.fn(), rect: vi.fn(), clip: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), stroke: vi.fn(), arc: vi.fn(),
       drawImage: vi.fn(), createRadialGradient: vi.fn(() => gradient), putImageData: vi.fn(),
       createImageData: vi.fn((w: number, h: number) => ({ data: new Uint8ClampedArray(w * h * 4), width: w, height: h })),
       fillStyle: '', strokeStyle: '', imageSmoothingEnabled: true,
@@ -37,6 +39,47 @@ function canvasHarness(cssWidth = 400, cssHeight = 200, dpr = 1) {
 }
 
 describe('original lab display geometry and palette', () => {
+  const field = { width: 10240, height: 10240 };
+
+  it('shows both complete 3 µm lines at their actual 50 nm separation', () => {
+    const target = canvasHarness(360, 360);
+    drawActualObject(target.canvas, PRESETS['two-lines'].build(600, null), field, viewBoxFor('two-lines'));
+    expect(target.context.moveTo.mock.calls).toEqual([[30, 177.5], [30, 182.5]]);
+    expect(target.context.lineTo.mock.calls).toEqual([[330, 177.5], [330, 182.5]]);
+    expect(target.context.strokeStyle).toBe('#efbe71');
+  });
+
+  it('shows the ring radius in physical coordinates and applies the same centered crop', () => {
+    const target = canvasHarness(250, 250);
+    const ring = PRESETS.ring.build(120, null);
+    drawActualObject(target.canvas, ring, field, viewBoxFor('ring'));
+    expect(target.context.arc).toHaveBeenLastCalledWith(125, 125, 30, 0, 2 * Math.PI);
+    drawActualObject(target.canvas, ring, field, { x0: 5057.5, y0: 5057.5, sizeNm: 125 });
+    expect(target.context.arc).toHaveBeenLastCalledWith(125, 125, 60, 0, 2 * Math.PI);
+  });
+
+  it('draws all ten actin rungs with 190 nm spacing and 400 nm length', () => {
+    const target = canvasHarness(480, 480);
+    drawActualObject(target.canvas, PRESETS.actin.build(500, null), field, viewBoxFor('actin'));
+    expect(target.context.moveTo.mock.calls).toHaveLength(10);
+    expect(target.context.moveTo.mock.calls[0]).toEqual([69, 200]);
+    expect(target.context.moveTo.mock.calls[1]).toEqual([107, 200]);
+    expect(target.context.lineTo.mock.calls[9]).toEqual([411, 280]);
+  });
+
+  it('registers the source image by its original aspect ratio and preserves alpha', () => {
+    const target = canvasHarness(400, 200);
+    const pixels = halfWhiteImage(4, 2);
+    const input = { kind: 'image' as const, imageData: pixels, sourceSize: { width: 10000, height: 1 }, nEmitters: 100 };
+    drawActualObject(target.canvas, input, { width: 10000, height: 10000 }, { x0: 0, y0: 0, sizeNm: 10000 });
+    expect(target.created[0].context.putImageData).toHaveBeenCalledWith(pixels, 0, 0);
+    expect(target.context.drawImage.mock.calls[0][0]).toBe(target.created[0].canvas);
+    const drawn = target.context.drawImage.mock.calls[0].slice(1);
+    [100, 99.99, 200, 0.02].forEach((expected, i) => expect(drawn[i]).toBeCloseTo(expected, 10));
+    drawActualObject(target.canvas, input, { width: 10000, height: 10000 }, { x0: 0, y0: 0, sizeNm: 10000 });
+    expect(target.created).toHaveLength(1);
+  });
+
   it('caps DPR while letterboxing a square physical field in a wide container', () => {
     expect(labViewport(480, 300, 3)).toEqual({
       width: 480, height: 300, dpr: 2, pixelWidth: 960, pixelHeight: 600,

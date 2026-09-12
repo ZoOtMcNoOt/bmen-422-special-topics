@@ -2,19 +2,20 @@ import { describe, expect, it } from 'vitest';
 import { FIELD_SIZE_NM } from '@/lib/simulator/defaults';
 import { generateGroundTruth } from '@/lib/simulator/groundTruth';
 import type { GroundTruthInput } from '@/lib/simulator/types';
-import { MAX_EMITTERS, PRESETS, PRESET_KINDS, emitterCount, isPresetKind, viewBoxFor } from '@/lib/presets';
+import { MAX_EMITTERS, PRESETS, PRESET_KINDS, isPresetKind, viewBoxFor } from '@/lib/presets';
 import { FIELD, halfWhiteImage } from './fixtures';
 
 function build(kind: (typeof PRESET_KINDS)[number], n: number, image: ImageData | null = null): GroundTruthInput {
-  const input = PRESETS[kind].build(n, image);
+  const input = PRESETS[kind].build(n, image ? { pixels: image, width: image.width, height: image.height } : null);
   if (!input) throw new Error(`${kind} produced no input`);
   return input;
 }
 
 describe('presets', () => {
-  it('every preset builds a ground truth with emitters', () => {
+  it('every preset produces exactly its displayed default molecule count', () => {
     for (const kind of PRESET_KINDS) {
-      expect(generateGroundTruth(build(kind, emitterCount(250), halfWhiteImage(16, 16)), FIELD).emitters.length).toBeGreaterThan(0);
+      const n = PRESETS[kind].defaultEmitters;
+      expect(generateGroundTruth(build(kind, n, halfWhiteImage(16, 16)), FIELD).emitters).toHaveLength(n);
     }
   });
 
@@ -22,9 +23,12 @@ describe('presets', () => {
     expect(PRESETS.image.build(100, null)).toBeNull();
   });
 
-  it('caps the emitter count', () => {
-    expect(emitterCount(1e6)).toBe(MAX_EMITTERS);
-    expect(emitterCount(0)).toBe(0);
+  it('changing the count changes the actual labels without a hidden camera-area multiplier', () => {
+    for (const kind of PRESET_KINDS) {
+      for (const n of [20, 100, 250, 500, MAX_EMITTERS]) {
+        expect(generateGroundTruth(build(kind, n, halfWhiteImage(16, 16)), FIELD).emitters).toHaveLength(n);
+      }
+    }
   });
 
   it('fixed view boxes are square, centred, and inside the field', () => {
@@ -41,28 +45,17 @@ describe('presets', () => {
     for (const kind of ['two-lines', 'ring', 'actin'] as const) {
       const gt = generateGroundTruth(build(kind, 1000), FIELD);
       const v = viewBoxFor(kind);
-      // Lines are longer than the view on purpose; check the axis that matters.
-      const ys = gt.emitters.map((e) => e.y);
-      expect(Math.min(...ys)).toBeGreaterThan(v.y0);
-      expect(Math.max(...ys)).toBeLessThan(v.y0 + v.sizeNm);
+      for (const axis of ['x', 'y'] as const) {
+        const coordinates = gt.emitters.map((e) => e[axis]);
+        const origin = axis === 'x' ? v.x0 : v.y0;
+        expect(Math.min(...coordinates)).toBeGreaterThan(origin);
+        expect(Math.max(...coordinates)).toBeLessThan(origin + v.sizeNm);
+      }
     }
   });
 
-  it('fits the image view to the molecules, padded, square, and inside the field', () => {
-    const emitters = [{ x: 3000, y: 4000 }, { x: 5000, y: 4000 }, { x: 4000, y: 4500 }];
-    const v = viewBoxFor('image', emitters);
-    expect(v.sizeNm).toBeCloseTo(2000 * 1.2, 6);
-    for (const e of emitters) {
-      expect(e.x).toBeGreaterThan(v.x0);
-      expect(e.x).toBeLessThan(v.x0 + v.sizeNm);
-      expect(e.y).toBeGreaterThan(v.y0);
-      expect(e.y).toBeLessThan(v.y0 + v.sizeNm);
-    }
-    // A single point never zooms below the floor, and clusters at the edge stay inside the field.
-    expect(viewBoxFor('image', [{ x: 5000, y: 5000 }]).sizeNm).toBe(500);
-    const edge = viewBoxFor('image', [{ x: 10, y: 10 }, { x: 40, y: 40 }]);
-    expect(edge.x0).toBe(0);
-    expect(edge.y0).toBe(0);
+  it('keeps the entire source image in view, including unlabelled regions', () => {
+    expect(viewBoxFor('image')).toEqual({ x0: 0, y0: 0, sizeNm: FIELD_SIZE_NM });
   });
 
   it('isPresetKind guards the union', () => {

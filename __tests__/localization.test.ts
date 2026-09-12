@@ -26,15 +26,11 @@ describe('localizeFrame', () => {
     expect(falsePositives).toBe(0);
   });
 
-  it('merges two emitters 50 nm apart into one detection at their midpoint', () => {
+  it('rejects two overlapping emitters that exceed the calibrated single-molecule brightness', () => {
     const p = params();
     const x = CENTER_NM + 40;
     const locs = localizeFrame(renderFrame([{ x, y: CENTER_NM - 25 }, { x, y: CENTER_NM + 25 }], p, 0), p);
-    const merged = nearestTo(locs, x, CENTER_NM);
-    expect(Math.abs(merged.y - CENTER_NM)).toBeLessThan(15);
-    // The ROI sums both molecules' photons.
-    expect(merged.nPhotons).toBeGreaterThan(1.5 * p.photonsPerCycle);
-    expect(merged.nPhotons).toBeLessThan(2.5 * p.photonsPerCycle);
+    expect(locs).toHaveLength(0);
   });
 
   it('resolves two emitters 800 nm apart as separate detections', () => {

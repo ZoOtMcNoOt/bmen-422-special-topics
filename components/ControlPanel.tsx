@@ -3,15 +3,18 @@
 import { useId } from 'react';
 
 import type { SimulationParams } from '@/lib/simulator/types';
+import { EMITTER_STEP, MIN_EMITTERS, MAX_EMITTERS } from '@/lib/presets';
 
 type Props = {
   params: SimulationParams;
 
   onChange: (params: SimulationParams) => void;
 
-  densityPerUm2: number;
+  moleculeCount: number;
 
-  onDensityChange: (density: number) => void;
+  onMoleculeCountChange: (count: number) => void;
+  seed: number;
+  onSeedChange: (seed: number) => void;
 
   disabled: boolean;
 };
@@ -19,8 +22,10 @@ type Props = {
 export function ControlPanel({
   params,
   onChange,
-  densityPerUm2,
-  onDensityChange,
+  moleculeCount,
+  onMoleculeCountChange,
+  seed,
+  onSeedChange,
   disabled,
 }: Props) {
   const set = <K extends keyof SimulationParams>(
@@ -42,14 +47,14 @@ export function ControlPanel({
       />
 
       <Range
-        label="Labelling density"
-        value={densityPerUm2}
-        output={densityPerUm2.toLocaleString()}
-        min={25}
-        max={500}
-        step={25}
-        unit="molecules / µm²"
-        onChange={onDensityChange}
+        label="Labelled molecules"
+        value={moleculeCount}
+        output={moleculeCount.toLocaleString()}
+        min={MIN_EMITTERS}
+        max={MAX_EMITTERS}
+        step={EMITTER_STEP}
+        unit="in the sample"
+        onChange={onMoleculeCountChange}
       />
 
       <Range
@@ -61,7 +66,7 @@ export function ControlPanel({
         step={0.1}
         lower="Sparse"
         upper="Dense"
-        unit="fraction active"
+        unit={`${(moleculeCount * params.dutyCycle).toLocaleString(undefined, { maximumFractionDigits: 2 })} on / frame on average`}
         onChange={(value) => set('dutyCycle', 10 ** value)}
       />
 
@@ -120,6 +125,21 @@ export function ControlPanel({
               <option value="rigorous">Poisson fit</option>
               <option value="pedagogical">Centroid</option>
             </select>
+          </label>
+          <label className="select-control">
+            Random seed
+            <input
+              type="number"
+              min={0}
+              max={2 ** 32 - 1}
+              step={1}
+              value={seed}
+              onChange={(event) => {
+                const value = event.target.valueAsNumber;
+                if (Number.isInteger(value) && value >= 0 && value < 2 ** 32)
+                  onSeedChange(value);
+              }}
+            />
           </label>
         </div>
       </details>

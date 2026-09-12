@@ -31,6 +31,13 @@ describe('quantitative CSV', () => {
     expect(last.corrected_x_nm).toBe(result.localizations.at(-1)!.x);
     expect(last.raw_x_nm - last.corrected_x_nm).toBeCloseTo(last.frame * 2, 10);
     expect(last.frames_acquired).toBe(4);
+    expect(last.molecules_in_sample).toBe(1);
+    expect(last.activation_fraction).toBe(0.5);
+    const seededRows = localizationCsv(result, 0).trim().split('\r\n');
+    const metadata = Object.fromEntries(seededRows[1].split(',').map((value, i) => [keys[i], value]));
+    expect(metadata.random_seed).toBe('0');
+    expect(metadata.fit_method).toBe(result.params.rigorMode);
+    expect(rows[0].split(',')[keys.indexOf('random_seed')]).toBe('');
     expect(
       localizationCsv({
         ...result,
