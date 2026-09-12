@@ -1,9 +1,31 @@
 {
   "baselineRevision": "7d21398be792fb574d8227568be7bc0ac20437cf",
-  "currentHead": "7d21398be792fb574d8227568be7bc0ac20437cf",
+  "checkoutHead": "63072dd6cbdf26a397ee64a63b2fcc2c62b2ff68",
+  "currentSource": {
+    "kind": "git-commit",
+    "revision": "63072dd6cbdf26a397ee64a63b2fcc2c62b2ff68",
+    "baseRevision": "63072dd6cbdf26a397ee64a63b2fcc2c62b2ff68",
+    "changedSourceFiles": [],
+    "sourceHashes": {
+      "lib/simulator/defaults.ts": "9659406e43de19e6e31f6e977514895d069339aedad4173b3f551729463dff4b",
+      "lib/presets.ts": "032b8c9b0d09812b6f51d6786d6a2afbf2ab01810ea9b7c6dd5a192d616a6442",
+      "lib/simulator/groundTruth.ts": "7d66050cefbb6249062493fa092a94796831b5baa5461d959c29db7ba9806879",
+      "lib/simulator/random.ts": "a0885597ef569fd9be327e4f0df19dfa50fc87c922371a8c0a91d5335e245c98",
+      "lib/simulator/analysis.ts": "a022a9d0853a6435e1c5d72019a1a7cf4936ecb6bc4cb8de3e286dd8179bf1f8",
+      "lib/simulator/localization.ts": "51af1432d88abe2e8ed11ac82bd6e3543ec4a2ea148f99ba199b4a8a5f6bbe60",
+      "lib/simulator/thompson.ts": "59c7927fd7f43b5a95488f52b3b5b1e6d2998d1deaf16e7cff70d6bb09963193",
+      "lib/simulator/psf.ts": "0dff15de61fd5ce6d0f1cf0f75cda09e3e1a1d4c8d8bc53267707db3b63b354f",
+      "lib/simulator/runSimulation.ts": "534bf4082e96c5d6d50b766af17f00ef90d662aafc5a6e114bcd0d87a98ba391",
+      "lib/utils.ts": "ca786d41ebb03132cb929f63e78f5784c7afb069518cb69bd1c0c935c94acc0f",
+      "lib/simulator/drift.ts": "e29b1d9ba8163d4881dcd930a4174385487d46c2f73ca422e1b3637110cb9271",
+      "lib/simulator/photoswitching.ts": "ae839aa4baa1aeebfcd7314685d83832955b7dbecdf000f474ba38857a00c303",
+      "lib/simulator/renderFrame.ts": "871110a94e550e2f7f7d39b4db91ea1ee246d006dfda79f23990a07bd5509d04",
+      "lib/simulator/poisson.ts": "50d0b8bb2603c01c4ea8d19a1e2811da08820df7faf112064e7a572ddf695ff6"
+    }
+  },
   "nodeVersion": "v24.13.0",
   "typescriptVersion": "5.9.3",
-  "auditSha256": "604fb97582477b7af14a32cf08ac552322ad62936d3e1c481190bb71d11c2037",
+  "auditSha256": "0bfbf7442e1d0a69148d4deea28fb976c497102fb7688c60c9f415857e58fc8e",
   "seeds": [
     42,
     20260912,
@@ -27,45 +49,27 @@
   "method": {
     "rng": "Current seededRandom: label stream seed; independent acquisition stream seed XOR 0xa5a5a5a5, matching the app.",
     "pairing": "Same GroundTruth object and seed supplied to both runSimulation versions. SHA256 over every raw Float32 camera pixel verifies identical observations.",
-    "provenance": "Source and audit-script SHA256 hashes normalize CRLF line endings to LF; no other whitespace is changed. Camera hashes cover unmodified binary pixels.",
+    "provenance": "checkoutHead is captured before loading model source. After the audit, every loaded current source hash is compared with that path at checkoutHead: all matches identify a git-commit; changed or new paths identify a working-tree with no revision claim. currentSource.sourceHashes identify the loaded model bytes. Source and audit-script SHA256 hashes normalize CRLF line endings to LF; no other whitespace is changed. Camera hashes cover unmodified binary pixels.",
     "acceptance": "Every current default case must have finite matched RMS/axis below 4 nm, zero unmatched fits, recall at least 50%, and at least 99% of accepted fits within 10 nm of ideal geometry. Crowded controls are diagnostic and exempt.",
     "errors": "Maximum-cardinality minimum-distance one-to-one matching to active truth in the same frame, inclusive one-PSF-sigma gate. RMS per axis is conditional on matched fits.",
     "shape": "Distance to ideal continuous lines, circle, actin segments, or visible image rectangle; not an image-resolution measurement.",
     "sampling": "labelsEverOn counts illuminated labels, including ones missed/rejected by the fitter; it is not unique resolved-molecule coverage.",
     "calibration": "Both engines see equal per-emitter mean brightness. The current quality gates use that known photon mean and known background/PSF; experimental brightness variation is outside this audit."
   },
-  "sourceHashes": {
-    "historical": {
-      "lib/presets.ts": "6853c41cfaba546bb69193de692ac03066a20b56062e0fba2135bbeff83e74f0",
-      "lib/simulator/defaults.ts": "9659406e43de19e6e31f6e977514895d069339aedad4173b3f551729463dff4b",
-      "lib/utils.ts": "ca786d41ebb03132cb929f63e78f5784c7afb069518cb69bd1c0c935c94acc0f",
-      "lib/simulator/groundTruth.ts": "8a37d90dc29cc7e709935cfeee7043a4c69541783dda412b04c07d78137ecf0a",
-      "lib/simulator/analysis.ts": "a022a9d0853a6435e1c5d72019a1a7cf4936ecb6bc4cb8de3e286dd8179bf1f8",
-      "lib/simulator/localization.ts": "9319b477261f83f0a9033c693471551fac1188f2b8715ce85f64da6f8f46054e",
-      "lib/simulator/thompson.ts": "59c7927fd7f43b5a95488f52b3b5b1e6d2998d1deaf16e7cff70d6bb09963193",
-      "lib/simulator/psf.ts": "0dff15de61fd5ce6d0f1cf0f75cda09e3e1a1d4c8d8bc53267707db3b63b354f",
-      "lib/simulator/runSimulation.ts": "534bf4082e96c5d6d50b766af17f00ef90d662aafc5a6e114bcd0d87a98ba391",
-      "lib/simulator/drift.ts": "e29b1d9ba8163d4881dcd930a4174385487d46c2f73ca422e1b3637110cb9271",
-      "lib/simulator/photoswitching.ts": "ae839aa4baa1aeebfcd7314685d83832955b7dbecdf000f474ba38857a00c303",
-      "lib/simulator/renderFrame.ts": "871110a94e550e2f7f7d39b4db91ea1ee246d006dfda79f23990a07bd5509d04",
-      "lib/simulator/poisson.ts": "50d0b8bb2603c01c4ea8d19a1e2811da08820df7faf112064e7a572ddf695ff6"
-    },
-    "current": {
-      "lib/simulator/defaults.ts": "9659406e43de19e6e31f6e977514895d069339aedad4173b3f551729463dff4b",
-      "lib/presets.ts": "032b8c9b0d09812b6f51d6786d6a2afbf2ab01810ea9b7c6dd5a192d616a6442",
-      "lib/simulator/groundTruth.ts": "7d66050cefbb6249062493fa092a94796831b5baa5461d959c29db7ba9806879",
-      "lib/simulator/random.ts": "a0885597ef569fd9be327e4f0df19dfa50fc87c922371a8c0a91d5335e245c98",
-      "lib/simulator/analysis.ts": "a022a9d0853a6435e1c5d72019a1a7cf4936ecb6bc4cb8de3e286dd8179bf1f8",
-      "lib/simulator/localization.ts": "51af1432d88abe2e8ed11ac82bd6e3543ec4a2ea148f99ba199b4a8a5f6bbe60",
-      "lib/simulator/thompson.ts": "59c7927fd7f43b5a95488f52b3b5b1e6d2998d1deaf16e7cff70d6bb09963193",
-      "lib/simulator/psf.ts": "0dff15de61fd5ce6d0f1cf0f75cda09e3e1a1d4c8d8bc53267707db3b63b354f",
-      "lib/simulator/runSimulation.ts": "534bf4082e96c5d6d50b766af17f00ef90d662aafc5a6e114bcd0d87a98ba391",
-      "lib/utils.ts": "ca786d41ebb03132cb929f63e78f5784c7afb069518cb69bd1c0c935c94acc0f",
-      "lib/simulator/drift.ts": "e29b1d9ba8163d4881dcd930a4174385487d46c2f73ca422e1b3637110cb9271",
-      "lib/simulator/photoswitching.ts": "ae839aa4baa1aeebfcd7314685d83832955b7dbecdf000f474ba38857a00c303",
-      "lib/simulator/renderFrame.ts": "871110a94e550e2f7f7d39b4db91ea1ee246d006dfda79f23990a07bd5509d04",
-      "lib/simulator/poisson.ts": "50d0b8bb2603c01c4ea8d19a1e2811da08820df7faf112064e7a572ddf695ff6"
-    }
+  "historicalSourceHashes": {
+    "lib/presets.ts": "6853c41cfaba546bb69193de692ac03066a20b56062e0fba2135bbeff83e74f0",
+    "lib/simulator/defaults.ts": "9659406e43de19e6e31f6e977514895d069339aedad4173b3f551729463dff4b",
+    "lib/utils.ts": "ca786d41ebb03132cb929f63e78f5784c7afb069518cb69bd1c0c935c94acc0f",
+    "lib/simulator/groundTruth.ts": "8a37d90dc29cc7e709935cfeee7043a4c69541783dda412b04c07d78137ecf0a",
+    "lib/simulator/analysis.ts": "a022a9d0853a6435e1c5d72019a1a7cf4936ecb6bc4cb8de3e286dd8179bf1f8",
+    "lib/simulator/localization.ts": "9319b477261f83f0a9033c693471551fac1188f2b8715ce85f64da6f8f46054e",
+    "lib/simulator/thompson.ts": "59c7927fd7f43b5a95488f52b3b5b1e6d2998d1deaf16e7cff70d6bb09963193",
+    "lib/simulator/psf.ts": "0dff15de61fd5ce6d0f1cf0f75cda09e3e1a1d4c8d8bc53267707db3b63b354f",
+    "lib/simulator/runSimulation.ts": "534bf4082e96c5d6d50b766af17f00ef90d662aafc5a6e114bcd0d87a98ba391",
+    "lib/simulator/drift.ts": "e29b1d9ba8163d4881dcd930a4174385487d46c2f73ca422e1b3637110cb9271",
+    "lib/simulator/photoswitching.ts": "ae839aa4baa1aeebfcd7314685d83832955b7dbecdf000f474ba38857a00c303",
+    "lib/simulator/renderFrame.ts": "871110a94e550e2f7f7d39b4db91ea1ee246d006dfda79f23990a07bd5509d04",
+    "lib/simulator/poisson.ts": "50d0b8bb2603c01c4ea8d19a1e2811da08820df7faf112064e7a572ddf695ff6"
   },
   "imageFixture": {
     "sourceSize": {

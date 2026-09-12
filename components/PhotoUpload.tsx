@@ -26,6 +26,7 @@ export function PhotoUpload({ onImageLoaded, disabled, decoding, onDecodingChang
     if (!file) return;
     const current = ++request.current;
     if (!file.type.startsWith('image/')) {
+      onDecodingChange(false);
       setStatus({ ok: false, text: 'Please choose a PNG, JPEG, or WebP image.' });
       return;
     }
