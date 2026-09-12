@@ -35,6 +35,7 @@ def test_parameter_sweep_returns_expected_metrics() -> None:
 
     assert len(result.parameter_values) == 2
     assert len(result.localization_rmse_nm) == 2
-    assert len(result.failure_rate) == 2
-    assert len(result.merge_rate) == 2
-    assert len(result.effective_resolution_nm) == 2
+    assert len(result.fit_failure_rate) == 2
+    assert len(result.missed_detection_rate) == 2
+    assert len(result.false_positive_rate) == 2
+    assert len(result.median_precision_nm) == 2

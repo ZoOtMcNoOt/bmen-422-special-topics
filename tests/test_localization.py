@@ -24,13 +24,16 @@ def test_single_emitter_localizes_close_to_truth() -> None:
         rng=np.random.default_rng(0),
         apply_poisson=False,
     )
-    candidates = detect_spots(frame, DetectionThreshold(sigma_multiplier=1.0, absolute_floor=2.0, min_distance_px=1))
+    candidates = detect_spots(
+        frame, DetectionThreshold(sigma_multiplier=1.0, absolute_floor=2.0, min_distance_px=1)
+    )
     result = localize_spots_mle(frame, candidates, psf_sigma_px=1.2, pixel_size_nm=100.0)
     success = ~result.failure_flags
 
     assert success.any()
     estimated = result.estimated_xy[success][0]
-    assert float(np.linalg.norm(estimated - truth[0])) < 0.75
+    assert float(np.linalg.norm(estimated - truth[0])) < 1e-3
+    np.testing.assert_allclose(result.photon_estimates[success][0], photons[0], rtol=1e-4)
 
 
 def test_linear_drift_correction_subtracts_expected_shift() -> None:

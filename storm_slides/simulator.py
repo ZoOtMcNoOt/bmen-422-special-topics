@@ -1,19 +1,57 @@
-"""Monte Carlo STORM simulator and lightweight localization pipeline."""
+"""Pixel-integrated STORM imaging, Poisson localization, and honest quality metrics.
+
+Coordinates use camera-pixel centers: (0, 0) is the center of the first pixel.
+The sensor therefore covers [-0.5, width-0.5) by [-0.5, height-0.5).
+"""
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import replace
-from typing import Iterable
 
 import numpy as np
+from scipy.ndimage import maximum_filter
+from scipy.optimize import linear_sum_assignment, minimize
+from scipy.special import ndtr, xlogy
 
 from storm_slides.models import (
     DetectionThreshold,
     FrameStack,
+    LocalizationMetrics,
     LocalizationResult,
     SimulationParams,
     SweepResult,
+    _canvas_shape,
+    _finite_number,
+    _integer,
 )
+
+
+def _xy_array(values: np.ndarray, name: str, *, finite: bool = True) -> np.ndarray:
+    points = np.asarray(values, dtype=np.float64)
+    if points.ndim != 2 or points.shape[1] != 2:
+        raise ValueError(f"{name} must have shape (N, 2)")
+    if finite and not np.isfinite(points).all():
+        raise ValueError(f"{name} must contain only finite coordinates")
+    return points
+
+
+def _photon_frame(frame: np.ndarray, camera_gain: float) -> np.ndarray:
+    _finite_number("camera_gain", camera_gain)
+    pixels = np.asarray(frame, dtype=np.float64)
+    if pixels.ndim != 2 or any(size == 0 for size in pixels.shape):
+        raise ValueError("frame must be a non-empty 2D array")
+    if not np.isfinite(pixels).all() or np.any(pixels < 0):
+        raise ValueError("frame must contain finite non-negative camera counts")
+    return pixels / camera_gain
+
+
+def _gaussian_axis(edges: np.ndarray, center: float, sigma: float) -> tuple[np.ndarray, np.ndarray]:
+    """Integrated pixel probabilities and their analytic center derivative."""
+    standardized = (edges - center) / sigma
+    cdf = ndtr(standardized)
+    pdf = np.exp(-0.5 * standardized**2) / (np.sqrt(2.0 * np.pi) * sigma)
+    return np.diff(cdf), pdf[:-1] - pdf[1:]
 
 
 def _add_gaussian_spot(
@@ -22,24 +60,20 @@ def _add_gaussian_spot(
     total_photons: float,
     sigma_px: float,
 ) -> None:
-    """Add a normalized Gaussian spot with a finite support window."""
+    """Integrate the Gaussian over sensor pixels, losing off-camera photons."""
     center_x, center_y = center_xy
-    radius = max(2, int(np.ceil(4 * sigma_px)))
+    radius = max(2, int(np.ceil(6 * sigma_px)))
     x_min = max(0, int(np.floor(center_x)) - radius)
     x_max = min(image.shape[1] - 1, int(np.floor(center_x)) + radius)
     y_min = max(0, int(np.floor(center_y)) - radius)
     y_max = min(image.shape[0] - 1, int(np.floor(center_y)) + radius)
     if x_min > x_max or y_min > y_max:
         return
-
-    ys = np.arange(y_min, y_max + 1, dtype=np.float64)
-    xs = np.arange(x_min, x_max + 1, dtype=np.float64)
-    xx, yy = np.meshgrid(xs, ys)
-    kernel = np.exp(-((xx - center_x) ** 2 + (yy - center_y) ** 2) / (2 * sigma_px**2))
-    kernel_sum = float(kernel.sum())
-    if kernel_sum <= 0:
-        return
-    image[y_min : y_max + 1, x_min : x_max + 1] += total_photons * kernel / kernel_sum
+    x_edges = np.arange(x_min, x_max + 2, dtype=np.float64) - 0.5
+    y_edges = np.arange(y_min, y_max + 2, dtype=np.float64) - 0.5
+    px, _ = _gaussian_axis(x_edges, center_x, sigma_px)
+    py, _ = _gaussian_axis(y_edges, center_y, sigma_px)
+    image[y_min : y_max + 1, x_min : x_max + 1] += total_photons * np.outer(py, px)
 
 
 def render_frame_from_emitters(
@@ -53,127 +87,226 @@ def render_frame_from_emitters(
     apply_poisson: bool = True,
     camera_gain: float = 1.0,
 ) -> np.ndarray:
-    """Render one frame from emitter coordinates and total photons per emitter."""
-    if rng is None:
-        rng = np.random.default_rng()
-    height, width = canvas_size_px
+    """Render expected photons or Poisson camera counts from a Gaussian PSF.
+
+    photon_totals are incident signal means before sensor cropping. Gain is a
+    deterministic conversion to camera units, not additional signal or EM gain.
+    """
+    height, width = _canvas_shape(canvas_size_px)
+    coordinates = _xy_array(emitter_xy, "emitter_xy")
+    photons = np.asarray(photon_totals, dtype=np.float64)
+    if photons.shape != (len(coordinates),) or not np.isfinite(photons).all() or np.any(photons < 0):
+        raise ValueError("photon_totals must contain one finite non-negative value per emitter")
+    _finite_number("psf_sigma_px", psf_sigma_px)
+    _finite_number("background_lambda", background_lambda, inclusive=True)
+    _finite_number("camera_gain", camera_gain)
     frame = np.full((height, width), background_lambda, dtype=np.float64)
-
-    for idx in range(emitter_xy.shape[0]):
-        x, y = emitter_xy[idx]
-        photons = float(photon_totals[idx])
-        if photons > 0:
-            _add_gaussian_spot(frame, (x, y), photons, psf_sigma_px)
-
+    for position, photon_count in zip(coordinates, photons, strict=True):
+        if photon_count > 0:
+            _add_gaussian_spot(
+                frame, (float(position[0]), float(position[1])), float(photon_count), psf_sigma_px
+            )
     if apply_poisson:
-        frame = rng.poisson(np.clip(frame, 1e-9, None)).astype(np.float64)
+        generator = rng if rng is not None else np.random.default_rng()
+        frame = generator.poisson(frame).astype(np.float64)
     return frame * camera_gain
 
 
-def simulate_storm_frames(params: SimulationParams) -> FrameStack:
-    """Simulate stochastic blinking emitters and noisy image frames."""
+def simulate_storm_frames(params: SimulationParams, *, emitter_xy: np.ndarray | None = None) -> FrameStack:
+    """Simulate a stationary two-state blinking process and noisy camera frames.
+
+    Supplied samples must contain n_emitters coordinates inside the sensor.
+    Independent seeded streams keep the sample and blinking unchanged when only
+    brightness, background, or camera gain changes.
+    """
     params.validate()
-    rng = np.random.default_rng(params.seed)
+    structure_seed, blinking_seed, photon_seed, camera_seed = np.random.SeedSequence(params.seed).spawn(4)
+    structure_rng = np.random.default_rng(structure_seed)
+    blinking_rng = np.random.default_rng(blinking_seed)
+    photon_rng = np.random.default_rng(photon_seed)
+    camera_rng = np.random.default_rng(camera_seed)
     height, width = params.canvas_size_px
 
-    margin = max(4, int(np.ceil(4 * params.psf_sigma_px)))
-    gt_xy = np.column_stack(
-        [
-            rng.uniform(margin, width - margin, size=params.n_emitters),
-            rng.uniform(margin, height - margin, size=params.n_emitters),
-        ]
-    )
+    if emitter_xy is None:
+        margin = min(max(4.0, 4 * params.psf_sigma_px), min(height, width) / 4)
+        extent = np.array([width - 2 * margin, height - 2 * margin])
+        ground_truth = margin + structure_rng.random((params.n_emitters, 2)) * extent
+    else:
+        ground_truth = _xy_array(emitter_xy, "emitter_xy").copy()
+        if ground_truth.shape[0] != params.n_emitters:
+            raise ValueError("emitter_xy length must equal n_emitters")
+        if not _inside_sensor(ground_truth, params.canvas_size_px).all():
+            raise ValueError("initial emitter_xy coordinates must be inside the sensor")
 
-    frames = np.zeros((params.frame_count, height, width), dtype=np.float64)
-    active = np.zeros((params.frame_count, params.n_emitters), dtype=bool)
-    drift_xy = np.zeros((params.frame_count, 2), dtype=np.float64)
+    frames = np.empty((params.frame_count, height, width), dtype=np.float64)
+    active = np.empty((params.frame_count, params.n_emitters), dtype=bool)
+    drift_xy = np.arange(params.frame_count)[:, None] * np.asarray(params.drift_per_frame_px)[None, :]
     emitter_photons = np.zeros((params.frame_count, params.n_emitters), dtype=np.float64)
+    on_probability, off_probability = params.on_off_rates
+    probability_sum = on_probability + off_probability
+    steady_state_on = on_probability / probability_sum if probability_sum else 0.0
+    states = blinking_rng.random(params.n_emitters) < steady_state_on
 
-    on_rate, off_rate = params.on_off_rates
-    steady_state_on = on_rate / (on_rate + off_rate + 1e-12)
-    states = rng.random(params.n_emitters) < steady_state_on
-
-    drift_step = np.asarray(params.drift_per_frame_px, dtype=np.float64)
     for frame_idx in range(params.frame_count):
-        if frame_idx > 0:
-            drift_xy[frame_idx] = drift_xy[frame_idx - 1] + drift_step
-
-        turn_on = (~states) & (rng.random(params.n_emitters) < on_rate)
-        turn_off = states & (rng.random(params.n_emitters) < off_rate)
-        states = (states | turn_on) & (~turn_off)
+        if frame_idx:
+            transition = blinking_rng.random(params.n_emitters)
+            states = np.where(states, transition >= off_probability, transition < on_probability)
         active[frame_idx] = states
-
-        active_indices = np.flatnonzero(states)
-        if active_indices.size:
-            sampled_photons = np.maximum(
-                1.0, rng.normal(loc=params.photon_mean, scale=0.15 * params.photon_mean, size=active_indices.size)
-            )
-            emitter_photons[frame_idx, active_indices] = sampled_photons
-
-        frame_emitters = gt_xy + drift_xy[frame_idx]
+        # Modest brightness heterogeneity; pixel arrivals carry the Poisson noise.
+        intensity = np.maximum(
+            0.0, photon_rng.normal(params.photon_mean, 0.15 * params.photon_mean, params.n_emitters)
+        )
+        emitter_photons[frame_idx] = np.where(states, intensity, 0.0)
         frames[frame_idx] = render_frame_from_emitters(
             params.canvas_size_px,
-            frame_emitters[active[frame_idx]],
-            emitter_photons[frame_idx, active[frame_idx]],
+            (ground_truth + drift_xy[frame_idx])[states],
+            emitter_photons[frame_idx, states],
             params.psf_sigma_px,
             params.background_lambda,
-            rng,
-            apply_poisson=True,
+            camera_rng,
             camera_gain=params.camera_gain,
         )
 
     return FrameStack(
         frames=frames,
-        ground_truth_xy=gt_xy,
+        ground_truth_xy=ground_truth,
         active_masks=active,
         frame_drift_xy=drift_xy,
         emitter_photons=emitter_photons,
+        camera_gain=params.camera_gain,
     )
 
 
-def detect_spots(frame: np.ndarray, threshold_cfg: DetectionThreshold | None = None) -> np.ndarray:
-    """Return candidate local maxima as (x, y) coordinates."""
+def detect_spots(
+    frame: np.ndarray,
+    threshold_cfg: DetectionThreshold | None = None,
+    *,
+    camera_gain: float = 1.0,
+) -> np.ndarray:
+    """Detect separated local intensity maxima using thresholds in photons."""
     cfg = threshold_cfg or DetectionThreshold()
     cfg.validate()
-    if frame.ndim != 2:
-        raise ValueError("frame must be 2D")
-
-    threshold = max(cfg.absolute_floor, float(frame.mean() + cfg.sigma_multiplier * frame.std()))
-    candidate = frame >= threshold
-    if not candidate.any():
-        return np.empty((0, 2), dtype=np.float64)
-
-    padded = np.pad(frame, 1, mode="edge")
-    neighborhood = [
-        padded[1:-1, 1:-1],
-        padded[:-2, :-2],
-        padded[:-2, 1:-1],
-        padded[:-2, 2:],
-        padded[1:-1, :-2],
-        padded[1:-1, 2:],
-        padded[2:, :-2],
-        padded[2:, 1:-1],
-        padded[2:, 2:],
-    ]
-    local_max_mask = candidate & (frame >= np.maximum.reduce(neighborhood))
-
-    local_max_mask[[0, -1], :] = False
-    local_max_mask[:, [0, -1]] = False
-    yx = np.argwhere(local_max_mask)
+    pixels = _photon_frame(frame, camera_gain)
+    threshold = max(cfg.absolute_floor, float(pixels.mean() + cfg.sigma_multiplier * pixels.std()))
+    # Strict comparison prevents a uniform background from becoming a plateau
+    # of fictitious detections when its standard deviation is zero.
+    maxima = (pixels > threshold) & (pixels == maximum_filter(pixels, size=3, mode="constant", cval=-np.inf))
+    yx = np.argwhere(maxima)
     if yx.size == 0:
         return np.empty((0, 2), dtype=np.float64)
-
-    # Greedy non-maximum suppression in descending intensity order.
-    order = np.argsort(frame[yx[:, 0], yx[:, 1]])[::-1]
+    order = np.lexsort((yx[:, 1], yx[:, 0], -pixels[yx[:, 0], yx[:, 1]]))
     selected: list[tuple[int, int]] = []
-    min_sq = cfg.min_distance_px**2
+    min_squared = cfg.min_distance_px**2
     for idx in order:
-        y, x = int(yx[idx, 0]), int(yx[idx, 1])
-        if all((x - sx) ** 2 + (y - sy) ** 2 >= min_sq for sy, sx in selected):
+        y, x = map(int, yx[idx])
+        if all((x - sx) ** 2 + (y - sy) ** 2 >= min_squared for sy, sx in selected):
             selected.append((y, x))
+    return np.asarray([(x, y) for y, x in selected], dtype=np.float64)
 
-    xy = np.asarray([[x, y] for y, x in selected], dtype=np.float64)
-    return xy
+
+def _empty_localizations() -> LocalizationResult:
+    return LocalizationResult(
+        estimated_xy=np.empty((0, 2), dtype=np.float64),
+        photon_estimates=np.empty(0, dtype=np.float64),
+        uncertainty_nm=np.empty(0, dtype=np.float64),
+        failure_flags=np.empty(0, dtype=bool),
+    )
+
+
+def _fit_gaussian_patch(
+    patch: np.ndarray,
+    x_edges: np.ndarray,
+    y_edges: np.ndarray,
+    candidate_xy: tuple[int, int],
+    psf_sigma_px: float,
+) -> tuple[np.ndarray, float, float] | None:
+    """Bounded Poisson MLE in (x, y, log photons, log background)."""
+    edge = np.concatenate((patch[0], patch[-1], patch[1:-1, 0], patch[1:-1, -1]))
+    background = max(float(np.median(edge)), 1e-3)
+    signal = np.maximum(patch - background, 0.0)
+    signal_sum = float(signal.sum())
+    if signal_sum <= 0:
+        return None
+    xs = (x_edges[:-1] + x_edges[1:]) / 2
+    ys = (y_edges[:-1] + y_edges[1:]) / 2
+    x_start = float(np.dot(signal.sum(axis=0), xs) / signal_sum)
+    y_start = float(np.dot(signal.sum(axis=1), ys) / signal_sum)
+    x_candidate, y_candidate = candidate_xy
+    x_bounds = (x_candidate - 1.5, x_candidate + 1.5)
+    y_bounds = (y_candidate - 1.5, y_candidate + 1.5)
+    x_start = np.clip(x_start, *x_bounds)
+    y_start = np.clip(y_start, *y_bounds)
+    px, _ = _gaussian_axis(x_edges, x_start, psf_sigma_px)
+    py, _ = _gaussian_axis(y_edges, y_start, psf_sigma_px)
+    photon_start = signal_sum / max(float(px.sum() * py.sum()), 1e-6)
+    total = float(patch.sum())
+    photon_max = max(20 * total, 100.0)
+    bounds = [
+        x_bounds,
+        y_bounds,
+        (np.log(1e-6), np.log(photon_max)),
+        (np.log(1e-9), np.log(float(patch.max()) + 1)),
+    ]
+    start = np.array([x_start, y_start, np.log(min(photon_start, photon_max)), np.log(background)])
+    scale = max(total, 1.0)
+    constant = float(np.sum(xlogy(patch, patch) - patch))
+
+    def model(theta: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        x, y, log_photons, log_background = theta
+        photons, bg = np.exp(log_photons), np.exp(log_background)
+        p_x, d_x = _gaussian_axis(x_edges, x, psf_sigma_px)
+        p_y, d_y = _gaussian_axis(y_edges, y, psf_sigma_px)
+        signal_model = photons * np.outer(p_y, p_x)
+        expectation = signal_model + bg
+        derivatives = np.array(
+            [
+                photons * np.outer(p_y, d_x),
+                photons * np.outer(d_y, p_x),
+                signal_model,
+                np.full_like(expectation, bg),
+            ]
+        )
+        return expectation, derivatives
+
+    def objective(theta: np.ndarray) -> tuple[float, np.ndarray]:
+        expectation, derivatives = model(theta)
+        value = (float(np.sum(expectation - patch * np.log(expectation))) + constant) / scale
+        residual = 1.0 - patch / expectation
+        gradient = np.einsum("kij,ij->k", derivatives, residual) / scale
+        return value, gradient
+
+    optimum = minimize(
+        objective,
+        start,
+        method="L-BFGS-B",
+        jac=True,
+        bounds=bounds,
+        options={"maxiter": 100, "ftol": 1e-11, "gtol": 1e-7},
+    )
+    if not optimum.success or not np.isfinite(optimum.x).all():
+        return None
+    # A center forced against its search bound usually belongs to another peak.
+    if (
+        min(
+            optimum.x[0] - x_bounds[0],
+            x_bounds[1] - optimum.x[0],
+            optimum.x[1] - y_bounds[0],
+            y_bounds[1] - optimum.x[1],
+        )
+        < 1e-5
+    ):
+        return None
+    expectation, derivatives = model(optimum.x)
+    jacobian = derivatives.reshape(4, -1)
+    information = (jacobian / expectation.ravel()) @ jacobian.T
+    try:
+        covariance = np.linalg.inv(information)
+    except np.linalg.LinAlgError:
+        return None
+    variance = float((covariance[0, 0] + covariance[1, 1]) / 2)
+    if not np.isfinite(variance) or variance <= 0:
+        return None
+    return optimum.x[:2], float(np.exp(optimum.x[2])), float(np.sqrt(variance))
 
 
 def localize_spots_mle(
@@ -182,63 +315,55 @@ def localize_spots_mle(
     psf_sigma_px: float,
     pixel_size_nm: float = 100.0,
     *,
-    patch_radius: int = 3,
+    patch_radius: int | None = None,
     min_signal_photons: float = 20.0,
+    camera_gain: float = 1.0,
 ) -> LocalizationResult:
-    """Approximate Gaussian MLE localization on local patches."""
-    if candidates_xy.size == 0:
-        empty = np.empty((0,), dtype=np.float64)
-        return LocalizationResult(
-            estimated_xy=np.empty((0, 2), dtype=np.float64),
-            photon_estimates=empty.copy(),
-            uncertainty_nm=empty.copy(),
-            failure_flags=np.empty((0,), dtype=bool),
+    """Fit fixed-width pixel-integrated Gaussian spots with Poisson likelihood.
+
+    Position, total signal photons and constant background are fitted together.
+    Reported uncertainty is the per-axis RMS Fisher-information precision bound
+    for this single-emitter model. Overlapping emitters violate that assumption.
+    Border patches are cropped consistently with the forward imaging model.
+    """
+    pixels = _photon_frame(frame, camera_gain)
+    candidates = _xy_array(candidates_xy, "candidates_xy")
+    _finite_number("psf_sigma_px", psf_sigma_px)
+    _finite_number("pixel_size_nm", pixel_size_nm)
+    _finite_number("min_signal_photons", min_signal_photons, inclusive=True)
+    radius = max(3, int(np.ceil(3 * psf_sigma_px))) if patch_radius is None else patch_radius
+    _integer("patch_radius", radius, minimum=2)
+    if len(candidates) == 0:
+        return _empty_localizations()
+    estimated = np.full((len(candidates), 2), np.nan)
+    photons = np.zeros(len(candidates), dtype=np.float64)
+    uncertainty = np.full(len(candidates), np.inf)
+    failures = np.ones(len(candidates), dtype=bool)
+    height, width = pixels.shape
+    for idx, (x_raw, y_raw) in enumerate(candidates):
+        x, y = int(np.floor(x_raw + 0.5)), int(np.floor(y_raw + 0.5))
+        if x < 0 or y < 0 or x >= width or y >= height:
+            continue
+        x_min, x_max = max(0, x - radius), min(width - 1, x + radius)
+        y_min, y_max = max(0, y - radius), min(height - 1, y + radius)
+        patch = pixels[y_min : y_max + 1, x_min : x_max + 1]
+        if min(patch.shape) < 3 or float(patch.sum()) < min_signal_photons:
+            continue
+        fitted = _fit_gaussian_patch(
+            patch,
+            np.arange(x_min, x_max + 2, dtype=np.float64) - 0.5,
+            np.arange(y_min, y_max + 2, dtype=np.float64) - 0.5,
+            (x, y),
+            psf_sigma_px,
         )
-
-    estimated = np.full((candidates_xy.shape[0], 2), np.nan, dtype=np.float64)
-    photons = np.zeros(candidates_xy.shape[0], dtype=np.float64)
-    uncertainty = np.full(candidates_xy.shape[0], np.inf, dtype=np.float64)
-    failures = np.ones(candidates_xy.shape[0], dtype=bool)
-
-    height, width = frame.shape
-    for idx, (x_raw, y_raw) in enumerate(candidates_xy):
-        x = int(np.round(x_raw))
-        y = int(np.round(y_raw))
-        x_min = x - patch_radius
-        x_max = x + patch_radius
-        y_min = y - patch_radius
-        y_max = y + patch_radius
-        if x_min < 0 or y_min < 0 or x_max >= width or y_max >= height:
+        if fitted is None or fitted[1] < min_signal_photons:
             continue
-
-        patch = frame[y_min : y_max + 1, x_min : x_max + 1].astype(np.float64)
-        edge_pixels = np.concatenate([patch[0, :], patch[-1, :], patch[:, 0], patch[:, -1]])
-        background = float(np.median(edge_pixels))
-        signal = np.clip(patch - background, a_min=0.0, a_max=None)
-        total_signal = float(signal.sum())
-        if total_signal < min_signal_photons:
-            continue
-
-        yy, xx = np.indices(signal.shape, dtype=np.float64)
-        xx += x_min
-        yy += y_min
-        x_hat = float((signal * xx).sum() / total_signal)
-        y_hat = float((signal * yy).sum() / total_signal)
-
-        estimated[idx] = [x_hat, y_hat]
-        photons[idx] = total_signal
-
-        # Thompson-like behavior proxy: sigma/sqrt(N) worsened by background.
-        background_penalty = 1.0 + background / max(total_signal, 1.0)
-        uncertainty[idx] = (psf_sigma_px * pixel_size_nm / np.sqrt(total_signal)) * background_penalty
+        position, photon_count, precision_px = fitted
+        estimated[idx] = position
+        photons[idx] = photon_count
+        uncertainty[idx] = precision_px * pixel_size_nm
         failures[idx] = False
-
-    return LocalizationResult(
-        estimated_xy=estimated,
-        photon_estimates=photons,
-        uncertainty_nm=uncertainty,
-        failure_flags=failures,
-    )
+    return LocalizationResult(estimated, photons, uncertainty, failures)
 
 
 def localize_frame_stack(
@@ -247,39 +372,29 @@ def localize_frame_stack(
     pixel_size_nm: float,
     threshold_cfg: DetectionThreshold | None = None,
 ) -> LocalizationResult:
-    """Run detection + localization over every frame in a stack."""
-    all_xy: list[np.ndarray] = []
-    all_photons: list[np.ndarray] = []
-    all_unc: list[np.ndarray] = []
-    all_fail: list[np.ndarray] = []
-    all_frame_index: list[np.ndarray] = []
-
+    """Run gain-calibrated detection and localization over the stack."""
+    results: list[LocalizationResult] = []
+    frame_indices: list[np.ndarray] = []
     for frame_idx, frame in enumerate(frame_stack.frames):
-        candidates = detect_spots(frame, threshold_cfg)
-        result = localize_spots_mle(frame, candidates, psf_sigma_px, pixel_size_nm)
-        if result.estimated_xy.size == 0:
-            continue
-        all_xy.append(result.estimated_xy)
-        all_photons.append(result.photon_estimates)
-        all_unc.append(result.uncertainty_nm)
-        all_fail.append(result.failure_flags)
-        all_frame_index.append(np.full(result.estimated_xy.shape[0], frame_idx, dtype=np.int64))
-
-    if not all_xy:
-        return LocalizationResult(
-            estimated_xy=np.empty((0, 2), dtype=np.float64),
-            photon_estimates=np.empty((0,), dtype=np.float64),
-            uncertainty_nm=np.empty((0,), dtype=np.float64),
-            failure_flags=np.empty((0,), dtype=bool),
-            frame_index=np.empty((0,), dtype=np.int64),
+        candidates = detect_spots(frame, threshold_cfg, camera_gain=frame_stack.camera_gain)
+        localized = localize_spots_mle(
+            frame,
+            candidates,
+            psf_sigma_px,
+            pixel_size_nm,
+            camera_gain=frame_stack.camera_gain,
         )
-
+        if len(localized.estimated_xy):
+            results.append(localized)
+            frame_indices.append(np.full(len(localized.estimated_xy), frame_idx, dtype=np.int64))
+    if not results:
+        return _empty_localizations()
     return LocalizationResult(
-        estimated_xy=np.vstack(all_xy),
-        photon_estimates=np.concatenate(all_photons),
-        uncertainty_nm=np.concatenate(all_unc),
-        failure_flags=np.concatenate(all_fail),
-        frame_index=np.concatenate(all_frame_index),
+        estimated_xy=np.concatenate([result.estimated_xy for result in results]),
+        photon_estimates=np.concatenate([result.photon_estimates for result in results]),
+        uncertainty_nm=np.concatenate([result.uncertainty_nm for result in results]),
+        failure_flags=np.concatenate([result.failure_flags for result in results]),
+        frame_index=np.concatenate(frame_indices),
     )
 
 
@@ -288,12 +403,30 @@ def apply_drift_correction(
     frame_index: np.ndarray,
     drift_per_frame_px: tuple[float, float],
 ) -> np.ndarray:
-    """Subtract linear frame-to-frame drift from localization coordinates."""
-    if localizations_xy.shape[0] != frame_index.shape[0]:
-        raise ValueError("localizations_xy and frame_index length mismatch")
-    drift_step = np.asarray(drift_per_frame_px, dtype=np.float64)
-    correction = frame_index[:, None].astype(np.float64) * drift_step[None, :]
-    return localizations_xy - correction
+    """Subtract known linear drift; this does not estimate drift from data."""
+    coordinates = _xy_array(localizations_xy, "localizations_xy", finite=False)
+    indices = np.asarray(frame_index)
+    if (
+        indices.shape != (len(coordinates),)
+        or not np.issubdtype(indices.dtype, np.integer)
+        or np.any(indices < 0)
+    ):
+        raise ValueError("frame_index must contain one non-negative integer per localization")
+    drift = np.asarray(drift_per_frame_px, dtype=np.float64)
+    if drift.shape != (2,) or not np.isfinite(drift).all():
+        raise ValueError("drift_per_frame_px must contain two finite numbers")
+    return coordinates - indices[:, None] * drift[None, :]
+
+
+def _inside_sensor(coordinates: np.ndarray, canvas_size_px: tuple[int, int]) -> np.ndarray:
+    height, width = canvas_size_px
+    return (
+        np.isfinite(coordinates).all(axis=1)
+        & (coordinates[:, 0] >= -0.5)
+        & (coordinates[:, 0] < width - 0.5)
+        & (coordinates[:, 1] >= -0.5)
+        & (coordinates[:, 1] < height - 0.5)
+    )
 
 
 def reconstruct_density_map(
@@ -304,77 +437,109 @@ def reconstruct_density_map(
     mode: str = "2d",
     z_values: np.ndarray | None = None,
     z_bins: int = 20,
+    z_range: tuple[float, float] | None = None,
 ) -> np.ndarray:
-    """Aggregate localizations into a 2D or 3D super-resolution histogram."""
-    height, width = canvas_size_px
-    sr_height = height * upsample_factor
-    sr_width = width * upsample_factor
+    """Count localizations in half-open sensor bins, omitting non-finite points.
 
+    The optional 3D histogram requires independently supplied axial coordinates;
+    this Gaussian 2D simulator does not infer z. Pass z_range to compare volumes
+    using a common axial scale; otherwise the finite input range is used.
+    """
+    height, width = _canvas_shape(canvas_size_px)
+    _integer("upsample_factor", upsample_factor)
+    coordinates = _xy_array(localizations_xy, "localizations_xy", finite=False)
     if mode not in {"2d", "3d"}:
         raise ValueError("mode must be either '2d' or '3d'")
-
-    if mode == "2d":
-        density = np.zeros((sr_height, sr_width), dtype=np.float64)
+    shape = (height * upsample_factor, width * upsample_factor)
+    valid = _inside_sensor(coordinates, canvas_size_px)
+    if mode == "3d":
+        _integer("z_bins", z_bins)
+        if z_values is None:
+            raise ValueError("z_values are required for mode='3d'")
+        axial = np.asarray(z_values, dtype=np.float64)
+        if axial.shape != (len(coordinates),):
+            raise ValueError("z_values must contain one value per localization")
+        valid &= np.isfinite(axial)
+        if z_range is not None:
+            if len(z_range) != 2 or not np.isfinite(z_range).all() or z_range[0] >= z_range[1]:
+                raise ValueError("z_range must contain finite increasing bounds")
+            z_min, z_max = z_range
+            valid &= (axial >= z_min) & (axial < z_max)
+        elif valid.any():
+            z_min, z_max = float(axial[valid].min()), float(axial[valid].max())
+            if z_min == z_max:
+                z_min, z_max = z_min - 0.5, z_max + 0.5
+            else:
+                z_max = float(np.nextafter(z_max, np.inf))
+        else:
+            z_min, z_max = 0.0, 1.0
+        density = np.zeros((z_bins, *shape), dtype=np.float64)
     else:
-        density = np.zeros((z_bins, sr_height, sr_width), dtype=np.float64)
-
-    if localizations_xy.size == 0:
-        return density
-
-    x_sr = np.round(localizations_xy[:, 0] * upsample_factor).astype(np.int64)
-    y_sr = np.round(localizations_xy[:, 1] * upsample_factor).astype(np.int64)
-    valid = (x_sr >= 0) & (x_sr < sr_width) & (y_sr >= 0) & (y_sr < sr_height)
-    x_sr = x_sr[valid]
-    y_sr = y_sr[valid]
-    if x_sr.size == 0:
-        return density
-
+        density = np.zeros(shape, dtype=np.float64)
+    selected = coordinates[valid]
+    x_bin = np.floor((selected[:, 0] + 0.5) * upsample_factor).astype(np.int64)
+    y_bin = np.floor((selected[:, 1] + 0.5) * upsample_factor).astype(np.int64)
     if mode == "2d":
-        np.add.at(density, (y_sr, x_sr), 1.0)
-        return density
-
-    if z_values is None or z_values.shape[0] != localizations_xy.shape[0]:
-        raise ValueError("z_values must be provided for mode='3d' with matching length")
-
-    z_valid = z_values[valid]
-    z_min = float(np.min(z_valid))
-    z_max = float(np.max(z_valid))
-    if z_max == z_min:
-        z_bin = np.zeros_like(z_valid, dtype=np.int64)
+        np.add.at(density, (y_bin, x_bin), 1.0)
     else:
-        z_bin = np.floor((z_valid - z_min) / (z_max - z_min) * (z_bins - 1)).astype(np.int64)
-    np.add.at(density, (z_bin, y_sr, x_sr), 1.0)
+        z_bin = np.floor((axial[valid] - z_min) / (z_max - z_min) * z_bins).astype(np.int64)
+        z_bin = np.minimum(z_bin, z_bins - 1)
+        np.add.at(density, (z_bin, y_bin, x_bin), 1.0)
     return density
 
 
-def _nearest_neighbor_rmse_nm(
-    estimated_xy: np.ndarray,
-    truth_xy: np.ndarray,
+def evaluate_localizations(
+    frame_stack: FrameStack,
+    localizations: LocalizationResult,
+    *,
     pixel_size_nm: float,
-) -> float:
-    if estimated_xy.size == 0 or truth_xy.size == 0:
-        return float("nan")
+    match_radius_px: float,
+) -> LocalizationMetrics:
+    """Match successful fits one-to-one to in-sensor active truth per frame.
 
-    # Brute-force nearest-neighbor error is enough for this educational simulator.
-    diffs = estimated_xy[:, None, :] - truth_xy[None, :, :]
-    sq_dist = np.sum(diffs**2, axis=2)
-    nearest_sq = np.min(sq_dist, axis=1)
-    rmse_px = float(np.sqrt(np.mean(nearest_sq)))
-    return rmse_px * pixel_size_nm
-
-
-def _effective_resolution_nm(localizations_xy: np.ndarray, pixel_size_nm: float) -> float:
-    if localizations_xy.shape[0] < 2:
-        return float("nan")
-    sample = localizations_xy
-    if sample.shape[0] > 2000:
-        rng = np.random.default_rng(0)
-        sample = sample[rng.choice(sample.shape[0], size=2000, replace=False)]
-    diffs = sample[:, None, :] - sample[None, :, :]
-    sq = np.sum(diffs**2, axis=2)
-    np.fill_diagonal(sq, np.inf)
-    nn = np.sqrt(np.min(sq, axis=1))
-    return float(np.median(nn) * pixel_size_nm)
+    RMSE includes matched detections only; missed and false-positive rates expose
+    the events excluded from that error. Empty denominators produce NaN rather
+    than implying success. Precision bounds are distinct from spatial resolution.
+    """
+    _finite_number("pixel_size_nm", pixel_size_nm)
+    _finite_number("match_radius_px", match_radius_px)
+    if localizations.frame_index.shape != (len(localizations.estimated_xy),):
+        raise ValueError("evaluation requires a frame_index for every localization")
+    if np.any(localizations.frame_index >= len(frame_stack.frames)):
+        raise ValueError("frame_index is outside the supplied frame stack")
+    successful = ~localizations.failure_flags
+    estimates = localizations.estimated_xy[successful]
+    indices = localizations.frame_index[successful]
+    squared_errors: list[float] = []
+    active_count = 0
+    for frame_idx, active in enumerate(frame_stack.active_masks):
+        truth = frame_stack.ground_truth_xy[active] + frame_stack.frame_drift_xy[frame_idx]
+        truth = truth[_inside_sensor(truth, frame_stack.frames.shape[1:])]
+        active_count += len(truth)
+        detected = estimates[indices == frame_idx]
+        if not len(truth) or not len(detected):
+            continue
+        distances = np.linalg.norm(detected[:, None, :] - truth[None, :, :], axis=2)
+        # The large cost prioritizes maximum valid matching before distance.
+        unmatched_cost = (min(distances.shape) + 1) * match_radius_px
+        rows, cols = linear_sum_assignment(np.where(distances <= match_radius_px, distances, unmatched_cost))
+        accepted = distances[rows, cols] <= match_radius_px
+        squared_errors.extend((distances[rows[accepted], cols[accepted]] ** 2).tolist())
+    matched = len(squared_errors)
+    detection_count = len(estimates)
+    return LocalizationMetrics(
+        localization_rmse_nm=float(np.sqrt(np.mean(squared_errors)) * pixel_size_nm)
+        if matched
+        else float("nan"),
+        fit_failure_rate=float(np.mean(localizations.failure_flags)) if len(successful) else float("nan"),
+        missed_detection_rate=1.0 - matched / active_count if active_count else float("nan"),
+        false_positive_rate=1.0 - matched / detection_count if detection_count else float("nan"),
+        median_precision_nm=float(np.median(localizations.uncertainty_nm[successful]))
+        if detection_count
+        else float("nan"),
+        matched_count=matched,
+        active_count=active_count,
+    )
 
 
 def run_parameter_sweep(
@@ -382,72 +547,41 @@ def run_parameter_sweep(
     sweep_spec: dict[str, Iterable[object]],
     threshold_cfg: DetectionThreshold | None = None,
 ) -> dict[str, SweepResult]:
-    """Run parameter sweeps and compute quality metrics."""
+    """Compare matched accuracy, fit failures, detection errors and precision."""
     results: dict[str, SweepResult] = {}
-    for param_name, iterable in sweep_spec.items():
+    for parameter, iterable in sweep_spec.items():
         values = list(iterable)
-        rmse_nm: list[float] = []
-        failure_rate: list[float] = []
-        merge_rate: list[float] = []
-        effective_res_nm: list[float] = []
-
+        metrics: list[LocalizationMetrics] = []
         for value in values:
-            varied = replace(base_params, **{param_name: value})
+            varied = replace(base_params, **{parameter: value})
             stack = simulate_storm_frames(varied)
-            localized = localize_frame_stack(
-                stack, psf_sigma_px=varied.psf_sigma_px, pixel_size_nm=varied.pixel_size_nm, threshold_cfg=threshold_cfg
+            localized = localize_frame_stack(stack, varied.psf_sigma_px, varied.pixel_size_nm, threshold_cfg)
+            metrics.append(
+                evaluate_localizations(
+                    stack,
+                    localized,
+                    pixel_size_nm=varied.pixel_size_nm,
+                    match_radius_px=varied.psf_sigma_px,
+                )
             )
-
-            if localized.estimated_xy.size == 0:
-                rmse_nm.append(float("nan"))
-                failure_rate.append(1.0)
-                merge_rate.append(1.0)
-                effective_res_nm.append(float("nan"))
-                continue
-
-            successful = ~localized.failure_flags
-            success_xy = localized.estimated_xy[successful]
-            success_frame_idx = localized.frame_index[successful]
-            corrected_xy = apply_drift_correction(success_xy, success_frame_idx, varied.drift_per_frame_px)
-
-            rmse_nm.append(_nearest_neighbor_rmse_nm(corrected_xy, stack.ground_truth_xy, varied.pixel_size_nm))
-            failure_rate.append(float(np.mean(localized.failure_flags)))
-
-            detected_per_frame = np.bincount(success_frame_idx, minlength=varied.frame_count)
-            mean_detected = float(np.mean(detected_per_frame))
-            mean_active = float(np.mean(stack.active_masks.sum(axis=1)))
-            overlap_penalty = 1.0 - (mean_detected / max(mean_active, 1e-9))
-            merge_rate.append(float(np.clip(overlap_penalty, 0.0, 1.0)))
-
-            effective_res_nm.append(_effective_resolution_nm(corrected_xy, varied.pixel_size_nm))
-
-        results[param_name] = SweepResult(
-            parameter_name=param_name,
+        results[parameter] = SweepResult(
+            parameter_name=parameter,
             parameter_values=values,
-            localization_rmse_nm=rmse_nm,
-            failure_rate=failure_rate,
-            merge_rate=merge_rate,
-            effective_resolution_nm=effective_res_nm,
+            localization_rmse_nm=[m.localization_rmse_nm for m in metrics],
+            fit_failure_rate=[m.fit_failure_rate for m in metrics],
+            missed_detection_rate=[m.missed_detection_rate for m in metrics],
+            false_positive_rate=[m.false_positive_rate for m in metrics],
+            median_precision_nm=[m.median_precision_nm for m in metrics],
         )
     return results
 
 
-# ------------------------------------------------------------------
-# Convenience helpers for slide visualisations
-# ------------------------------------------------------------------
-
-#: Fast-running default params for in-slide demos (small canvas, few frames).
 QUICK_SIM_PARAMS = SimulationParams(
     n_emitters=30,
     frame_count=40,
     canvas_size_px=(32, 32),
-    pixel_size_nm=100.0,
-    psf_sigma_px=1.2,
-    background_lambda=2.0,
-    photon_mean=550.0,
     on_off_rates=(0.08, 0.3),
     drift_per_frame_px=(0.0, 0.0),
-    camera_gain=1.0,
     seed=42,
 )
 
@@ -459,26 +593,26 @@ def quick_sim(
     drift: tuple[float, float] | None = None,
     seed: int | None = None,
 ) -> tuple[FrameStack, LocalizationResult]:
-    """Run a fast simulation with sensible defaults, returning frames + localisations."""
-    overrides: dict = {}
-    if n_emitters is not None:
-        overrides["n_emitters"] = n_emitters
-    if photon_mean is not None:
-        overrides["photon_mean"] = photon_mean
-    if drift is not None:
-        overrides["drift_per_frame_px"] = drift
-    if seed is not None:
-        overrides["seed"] = seed
+    """Run a small simulation for slide illustrations."""
+    overrides = {
+        key: value
+        for key, value in (
+            ("n_emitters", n_emitters),
+            ("photon_mean", photon_mean),
+            ("drift_per_frame_px", drift),
+            ("seed", seed),
+        )
+        if value is not None
+    }
     params = replace(QUICK_SIM_PARAMS, **overrides)
     stack = simulate_storm_frames(params)
-    locs = localize_frame_stack(stack, params.psf_sigma_px, params.pixel_size_nm)
-    return stack, locs
+    return stack, localize_frame_stack(stack, params.psf_sigma_px, params.pixel_size_nm)
 
 
 def frame_to_image_array(frame: np.ndarray) -> np.ndarray:
-    """Normalise a single frame to uint8 grayscale (H, W) for visualisation."""
-    f = frame.astype(np.float64)
-    mn, mx = f.min(), f.max()
-    if mx == mn:
-        return np.zeros_like(f, dtype=np.uint8)
-    return ((f - mn) / (mx - mn) * 255).astype(np.uint8)
+    """Normalize a frame for display only; localization always uses raw counts."""
+    pixels = _photon_frame(frame, 1.0)
+    low, high = float(pixels.min()), float(pixels.max())
+    if high == low:
+        return np.zeros_like(pixels, dtype=np.uint8)
+    return ((pixels - low) / (high - low) * 255).astype(np.uint8)

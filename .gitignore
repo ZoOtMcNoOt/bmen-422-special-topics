@@ -10,6 +10,9 @@ pytest-cache-files-*/
 .venv/
 venv/
 .tmp/
+build/
+dist/
+*.egg-info/
 
 # Manim / Manim Slides outputs
 media/
@@ -19,6 +22,3 @@ slides/
 # OS/editor noise
 .DS_Store
 Thumbs.db
-
-.tmp/
-storm_animation.egg-info

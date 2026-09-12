@@ -10,10 +10,10 @@ import numpy as np
 
 from storm_slides.models import SweepResult
 
-
 # ------------------------------------------------------------------
 # Pure-numpy helpers (always available, even without Manim)
 # ------------------------------------------------------------------
+
 
 def normalize_array(values: np.ndarray) -> np.ndarray:
     """Min-max normalise *values* to [0, 1]."""
@@ -34,8 +34,8 @@ def sweep_to_table_rows(result: SweepResult) -> list[tuple[str, float, float, fl
             (
                 str(value),
                 float(result.localization_rmse_nm[idx]),
-                float(result.failure_rate[idx]),
-                float(result.effective_resolution_nm[idx]),
+                float(result.fit_failure_rate[idx]),
+                float(result.median_precision_nm[idx]),
             )
         )
     return rows
@@ -83,7 +83,7 @@ def gaussian_2d(
     else:
         cx, cy = center
     yy, xx = np.mgrid[0:size, 0:size].astype(np.float64)
-    g = np.exp(-((xx - cx) ** 2 + (yy - cy) ** 2) / (2 * sigma ** 2))
+    g = np.exp(-((xx - cx) ** 2 + (yy - cy) ** 2) / (2 * sigma**2))
     return g / (g.max() + 1e-12)
 
 
