@@ -67,14 +67,20 @@ describe('runSimulation', () => {
 
   it('reports matched localization error and accounts for every fit and active emitter-frame', async () => {
     const r = await runSimulation(gt, p, { rng: seeded(12) });
-    expect(r.localizations.length).toBeGreaterThan(50);
+    expect(r.localizations.length).toBeGreaterThan(100);
     const predicted = thompsonSigmaLoc(p.psfSigmaNm, p.photonsPerCycle, p.pixelSizeNm, p.backgroundPerPixel);
     expect(r.apparentSigmaLocNm).not.toBeNull();
     expect(r.apparentSigmaLocNm! / predicted).toBeGreaterThan(0.75);
     expect(r.apparentSigmaLocNm! / predicted).toBeLessThan(1.35);
     expect(r.metrics.rmsPerAxisErrorNm).toBeGreaterThan(0);
-    expect(r.metrics.rmsPerAxisErrorNm).toBeLessThan(40);
-    expect(r.metrics.detectionRecall).toBeGreaterThan(0.6);
+    // This crowded acquisition has >1 active molecule per frame on average.
+    // Rejecting incompatible overlaps sacrifices recall: the former fit reached
+    // 67% recall but had 21 nm RMS/axis and 32 unmatched detections for this seed.
+    // Require accurate retained fits and no false positives, not just more fits.
+    expect(r.metrics.rmsPerAxisErrorNm).toBeLessThan(2 * predicted);
+    expect(r.metrics.falsePositiveCount).toBe(0);
+    expect(r.metrics.falsePositiveRate).toBe(0);
+    expect(r.metrics.detectionRecall).toBeGreaterThan(0.5);
     expect(r.metrics.detectionRecall).toBeLessThanOrEqual(1);
     expect(r.metrics.matchedCount + r.metrics.falsePositiveCount).toBe(r.localizations.length);
     expect(r.metrics.matchedCount + r.metrics.missedCount).toBe(r.metrics.activeEmitterFrames);

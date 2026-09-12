@@ -1,6 +1,6 @@
 import { FIELD_SIZE_NM } from './simulator/defaults';
-import { clamp } from './utils';
-import type { Emitter, GroundTruthInput, ViewBox } from './simulator/types';
+import type { GroundTruthInput, ViewBox } from './simulator/types';
+import type { DecodedImage } from './rendering/canvas';
 
 export type PresetKind = 'two-lines' | 'ring' | 'actin' | 'image';
 
@@ -8,9 +8,10 @@ export const PRESET_KINDS: readonly PresetKind[] = ['two-lines', 'ring', 'actin'
 export const isPresetKind = (v: unknown): v is PresetKind => PRESET_KINDS.some((k) => k === v);
 
 export const DEFAULT_PRESET: PresetKind = 'two-lines';
-export const DEFAULT_DENSITY_PER_UM2 = 250;
-/** Emitter count is capped so the acquisition stays interactive. */
+/** The control specifies the actual label count, not the empty camera's area. */
+export const MIN_EMITTERS = 20;
 export const MAX_EMITTERS = 10_000;
+export const EMITTER_STEP = 10;
 
 type Preset = {
   label: string;
@@ -18,14 +19,16 @@ type Preset = {
   blurb: string;
   /** Side of the square region the panels show. `null` = whole field. */
   viewSizeNm: number | null;
-  build: (nEmitters: number, image: ImageData | null) => GroundTruthInput | null;
+  defaultEmitters: number;
+  build: (nEmitters: number, image: DecodedImage | null) => GroundTruthInput | null;
 };
 
 export const PRESETS: Record<PresetKind, Preset> = {
   'two-lines': {
     label: 'Two lines',
-    blurb: 'Parallel lines, 50 nm apart.',
-    viewSizeNm: 1000,
+    blurb: 'Two 3 µm lines separated by 50 nm.',
+    viewSizeNm: 3600,
+    defaultEmitters: 600,
     build: (n) => ({
       kind: 'two-lines',
       separationNm: 50,
@@ -34,15 +37,17 @@ export const PRESETS: Record<PresetKind, Preset> = {
     }),
   },
   ring: {
-    label: 'Microtubule',
-    blurb: 'A 60 nm ring representing a labelled cross-section.',
-    viewSizeNm: 500,
+    label: 'Ring',
+    blurb: 'A 60 nm diameter ring, viewed from above.',
+    viewSizeNm: 250,
+    defaultEmitters: 120,
     build: (n) => ({ kind: 'ring', diameterNm: 60, nEmitters: n }),
   },
   actin: {
-    label: 'Actin rings',
-    blurb: 'A synthetic lattice with 190 nm spacing.',
-    viewSizeNm: 2000,
+    label: 'Actin, side view',
+    blurb: 'Ten rungs, 190 nm apart. A simplified side view of actin rings.',
+    viewSizeNm: 2400,
+    defaultEmitters: 500,
     build: (n) => ({
       kind: 'actin',
       periodNm: 190,
@@ -55,40 +60,20 @@ export const PRESETS: Record<PresetKind, Preset> = {
     label: 'Your image',
     blurb: 'Bright image pixels define the sample.',
     viewSizeNm: null,
-    build: (n, image) => (image ? { kind: 'image', imageData: image, nEmitters: n } : null),
+    defaultEmitters: 2000,
+    build: (n, image) => (image ? {
+      kind: 'image', imageData: image.pixels,
+      sourceSize: { width: image.width, height: image.height }, nEmitters: n,
+    } : null),
   },
 };
 
-export function emitterCount(densityPerUm2: number): number {
-  const areaUm2 = (FIELD_SIZE_NM / 1000) ** 2;
-  return Math.min(MAX_EMITTERS, Math.round(densityPerUm2 * areaUm2));
-}
-
-/** Auto-fit views never zoom in past this, so a tiny sketch isn't blown up beyond the PSF. */
-const MIN_VIEW_NM = 500;
-const FIT_PADDING = 0.1;
-
 /**
- * The square view box for a preset. Built-in samples use a tuned size centred
- * on the field; the image preset fits the box to wherever the molecules are.
+ * The whole specimen, including the full uploaded image. The physical field
+ * must not change with random labelling or hide unlabelled parts of the source.
  */
-export function viewBoxFor(kind: PresetKind, emitters?: readonly Emitter[]): ViewBox {
-  const fixed = PRESETS[kind].viewSizeNm;
-  if (fixed !== null || !emitters?.length) return centred(fixed ?? FIELD_SIZE_NM);
-
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-  for (const e of emitters) {
-    if (e.x < minX) minX = e.x;
-    if (e.x > maxX) maxX = e.x;
-    if (e.y < minY) minY = e.y;
-    if (e.y > maxY) maxY = e.y;
-  }
-  const sizeNm = clamp(Math.max(maxX - minX, maxY - minY) * (1 + 2 * FIT_PADDING), MIN_VIEW_NM, FIELD_SIZE_NM);
-  return {
-    x0: clamp((minX + maxX) / 2 - sizeNm / 2, 0, FIELD_SIZE_NM - sizeNm),
-    y0: clamp((minY + maxY) / 2 - sizeNm / 2, 0, FIELD_SIZE_NM - sizeNm),
-    sizeNm,
-  };
+export function viewBoxFor(kind: PresetKind): ViewBox {
+  return centred(PRESETS[kind].viewSizeNm ?? FIELD_SIZE_NM);
 }
 
 function centred(sizeNm: number): ViewBox {

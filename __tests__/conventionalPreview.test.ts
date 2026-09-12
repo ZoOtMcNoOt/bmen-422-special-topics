@@ -59,7 +59,9 @@ describe('ideal conventional fluorescence preview', () => {
     const { pixels, sizePx } = conventionalPreview(truth.emitters, viewBoxFor('ring'), 130);
     const middle = Math.floor(sizePx / 2);
     expect(pixels[middle * sizePx + middle]).toBe(255);
-    expect(pixels[middle * sizePx + middle + 10]).toBeLessThan(200);
+    // Compare the center to the edge of the physical 250 nm field, not a
+    // fixed display-pixel offset that changes when the view is resized.
+    expect(pixels[middle * sizePx + sizePx - 1]).toBeLessThan(200);
     expect(pixels).toHaveLength(sizePx ** 2);
     expect(sizePx).toBeLessThanOrEqual(512);
   });

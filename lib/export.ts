@@ -2,7 +2,7 @@ import { correctLocalizationDrift } from './simulator/drift';
 import type { SimulationResult } from './simulator/types';
 
 /** Full acquisition with raw/known-drift-corrected positions and zero-based frame indices. */
-export function localizationCsv(result: SimulationResult): string {
+export function localizationCsv(result: SimulationResult, seed?: number): string {
   const header = [
     'frame',
     'raw_x_nm',
@@ -17,6 +17,10 @@ export function localizationCsv(result: SimulationResult): string {
     'psf_sigma_nm',
     'drift_nm_per_frame',
     'frames_acquired',
+    'molecules_in_sample',
+    'activation_fraction',
+    'random_seed',
+    'fit_method',
   ];
   const p = result.params;
   const corrected = correctLocalizationDrift(
@@ -39,6 +43,10 @@ export function localizationCsv(result: SimulationResult): string {
       p.psfSigmaNm,
       p.driftRateNmPerFrame,
       result.framesCompleted,
+      result.groundTruth.emitters.length,
+      p.dutyCycle,
+      seed ?? '',
+      p.rigorMode,
     ].join(',');
   });
   return [header.join(','), ...rows].join('\r\n') + '\r\n';

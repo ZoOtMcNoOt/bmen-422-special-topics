@@ -1,0 +1,2420 @@
+{
+  "baselineRevision": "7d21398be792fb574d8227568be7bc0ac20437cf",
+  "currentHead": "7d21398be792fb574d8227568be7bc0ac20437cf",
+  "nodeVersion": "v24.13.0",
+  "typescriptVersion": "5.9.3",
+  "auditSha256": "604fb97582477b7af14a32cf08ac552322ad62936d3e1c481190bb71d11c2037",
+  "seeds": [
+    42,
+    20260912,
+    987654321
+  ],
+  "params": {
+    "photonsPerCycle": 5000,
+    "backgroundPerPixel": 20,
+    "dutyCycle": 0.001,
+    "nFrames": 2000,
+    "driftRateNmPerFrame": 0,
+    "correctDrift": true,
+    "rigorMode": "rigorous",
+    "pixelSizeNm": 160,
+    "psfSigmaNm": 130,
+    "fieldSizePx": {
+      "width": 64,
+      "height": 64
+    }
+  },
+  "method": {
+    "rng": "Current seededRandom: label stream seed; independent acquisition stream seed XOR 0xa5a5a5a5, matching the app.",
+    "pairing": "Same GroundTruth object and seed supplied to both runSimulation versions. SHA256 over every raw Float32 camera pixel verifies identical observations.",
+    "provenance": "Source and audit-script SHA256 hashes normalize CRLF line endings to LF; no other whitespace is changed. Camera hashes cover unmodified binary pixels.",
+    "acceptance": "Every current default case must have finite matched RMS/axis below 4 nm, zero unmatched fits, recall at least 50%, and at least 99% of accepted fits within 10 nm of ideal geometry. Crowded controls are diagnostic and exempt.",
+    "errors": "Maximum-cardinality minimum-distance one-to-one matching to active truth in the same frame, inclusive one-PSF-sigma gate. RMS per axis is conditional on matched fits.",
+    "shape": "Distance to ideal continuous lines, circle, actin segments, or visible image rectangle; not an image-resolution measurement.",
+    "sampling": "labelsEverOn counts illuminated labels, including ones missed/rejected by the fitter; it is not unique resolved-molecule coverage.",
+    "calibration": "Both engines see equal per-emitter mean brightness. The current quality gates use that known photon mean and known background/PSF; experimental brightness variation is outside this audit."
+  },
+  "sourceHashes": {
+    "historical": {
+      "lib/presets.ts": "6853c41cfaba546bb69193de692ac03066a20b56062e0fba2135bbeff83e74f0",
+      "lib/simulator/defaults.ts": "9659406e43de19e6e31f6e977514895d069339aedad4173b3f551729463dff4b",
+      "lib/utils.ts": "ca786d41ebb03132cb929f63e78f5784c7afb069518cb69bd1c0c935c94acc0f",
+      "lib/simulator/groundTruth.ts": "8a37d90dc29cc7e709935cfeee7043a4c69541783dda412b04c07d78137ecf0a",
+      "lib/simulator/analysis.ts": "a022a9d0853a6435e1c5d72019a1a7cf4936ecb6bc4cb8de3e286dd8179bf1f8",
+      "lib/simulator/localization.ts": "9319b477261f83f0a9033c693471551fac1188f2b8715ce85f64da6f8f46054e",
+      "lib/simulator/thompson.ts": "59c7927fd7f43b5a95488f52b3b5b1e6d2998d1deaf16e7cff70d6bb09963193",
+      "lib/simulator/psf.ts": "0dff15de61fd5ce6d0f1cf0f75cda09e3e1a1d4c8d8bc53267707db3b63b354f",
+      "lib/simulator/runSimulation.ts": "534bf4082e96c5d6d50b766af17f00ef90d662aafc5a6e114bcd0d87a98ba391",
+      "lib/simulator/drift.ts": "e29b1d9ba8163d4881dcd930a4174385487d46c2f73ca422e1b3637110cb9271",
+      "lib/simulator/photoswitching.ts": "ae839aa4baa1aeebfcd7314685d83832955b7dbecdf000f474ba38857a00c303",
+      "lib/simulator/renderFrame.ts": "871110a94e550e2f7f7d39b4db91ea1ee246d006dfda79f23990a07bd5509d04",
+      "lib/simulator/poisson.ts": "50d0b8bb2603c01c4ea8d19a1e2811da08820df7faf112064e7a572ddf695ff6"
+    },
+    "current": {
+      "lib/simulator/defaults.ts": "9659406e43de19e6e31f6e977514895d069339aedad4173b3f551729463dff4b",
+      "lib/presets.ts": "032b8c9b0d09812b6f51d6786d6a2afbf2ab01810ea9b7c6dd5a192d616a6442",
+      "lib/simulator/groundTruth.ts": "7d66050cefbb6249062493fa092a94796831b5baa5461d959c29db7ba9806879",
+      "lib/simulator/random.ts": "a0885597ef569fd9be327e4f0df19dfa50fc87c922371a8c0a91d5335e245c98",
+      "lib/simulator/analysis.ts": "a022a9d0853a6435e1c5d72019a1a7cf4936ecb6bc4cb8de3e286dd8179bf1f8",
+      "lib/simulator/localization.ts": "51af1432d88abe2e8ed11ac82bd6e3543ec4a2ea148f99ba199b4a8a5f6bbe60",
+      "lib/simulator/thompson.ts": "59c7927fd7f43b5a95488f52b3b5b1e6d2998d1deaf16e7cff70d6bb09963193",
+      "lib/simulator/psf.ts": "0dff15de61fd5ce6d0f1cf0f75cda09e3e1a1d4c8d8bc53267707db3b63b354f",
+      "lib/simulator/runSimulation.ts": "534bf4082e96c5d6d50b766af17f00ef90d662aafc5a6e114bcd0d87a98ba391",
+      "lib/utils.ts": "ca786d41ebb03132cb929f63e78f5784c7afb069518cb69bd1c0c935c94acc0f",
+      "lib/simulator/drift.ts": "e29b1d9ba8163d4881dcd930a4174385487d46c2f73ca422e1b3637110cb9271",
+      "lib/simulator/photoswitching.ts": "ae839aa4baa1aeebfcd7314685d83832955b7dbecdf000f474ba38857a00c303",
+      "lib/simulator/renderFrame.ts": "871110a94e550e2f7f7d39b4db91ea1ee246d006dfda79f23990a07bd5509d04",
+      "lib/simulator/poisson.ts": "50d0b8bb2603c01c4ea8d19a1e2811da08820df7faf112064e7a572ddf695ff6"
+    }
+  },
+  "imageFixture": {
+    "sourceSize": {
+      "width": 4096,
+      "height": 4
+    },
+    "bufferSize": {
+      "width": 256,
+      "height": 1
+    },
+    "visiblePixelColumns": [
+      64,
+      192
+    ],
+    "supportNm": {
+      "xLow": 2560,
+      "xHigh": 7680,
+      "yLow": 5115,
+      "yHigh": 5125
+    },
+    "labeling": [
+      {
+        "seed": 42,
+        "requestedLabels": 2000,
+        "currentCount": 2000,
+        "currentInsideVisibleSupport": 2000,
+        "historicalCount": 2000,
+        "historicalInsideVisibleSupport": 254
+      },
+      {
+        "seed": 20260912,
+        "requestedLabels": 2000,
+        "currentCount": 2000,
+        "currentInsideVisibleSupport": 2000,
+        "historicalCount": 2000,
+        "historicalInsideVisibleSupport": 271
+      },
+      {
+        "seed": 987654321,
+        "requestedLabels": 2000,
+        "currentCount": 2000,
+        "currentInsideVisibleSupport": 2000,
+        "historicalCount": 2000,
+        "historicalInsideVisibleSupport": 250
+      }
+    ]
+  },
+  "cases": [
+    {
+      "kind": "two-lines",
+      "regime": "preset-default",
+      "labels": 600,
+      "seed": 42,
+      "truthSha256": "4d6d085f3dc6f5edcee536d2539eb002476197d68396745a6e66a4809385462f",
+      "historical": {
+        "cameraSha256": "c8b96ba27f056b8494181eeedbae81e08a63ef7c9bcd4bf53d0aed77af3782c9",
+        "frames": 2000,
+        "labelsEverOn": 325,
+        "fractionLabelsEverOn": 0.5416666666666666,
+        "meanActive": 0.5695,
+        "acceptedFits": 1045,
+        "rmsPerAxisErrorNm": 16.844333869787555,
+        "matchedCount": 954,
+        "activeEmitterFrames": 1139,
+        "missedCount": 185,
+        "falsePositiveCount": 91,
+        "detectionRecall": 0.8375768217734855,
+        "falsePositiveRate": 0.08708133971291866,
+        "matchRadiusNm": 130,
+        "medianFittedPhotons": 5031.536965773429,
+        "p90FittedPhotons": 9077.67758247184,
+        "medianThompsonNm": 2.0010800622823823,
+        "shape": {
+          "medianDistanceNm": 1.4791156099408909,
+          "p90DistanceNm": 4.311533464557215,
+          "rmsDistanceNm": 5.816560238395611,
+          "fractionWithin10Nm": 0.9406698564593301
+        },
+        "framing": {
+          "view": {
+            "x0": 4620,
+            "y0": 4620,
+            "sizeNm": 1000
+          },
+          "labelsInView": 200,
+          "fitsInView": 330
+        },
+        "groups": {
+          "empty": {
+            "frames": 1150,
+            "rmsPerAxisErrorNm": null,
+            "matchedCount": 0,
+            "activeEmitterFrames": 0,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": null,
+            "falsePositiveRate": null,
+            "matchRadiusNm": 130
+          },
+          "single": {
+            "frames": 610,
+            "rmsPerAxisErrorNm": 2.080192052468099,
+            "matchedCount": 610,
+            "activeEmitterFrames": 610,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": 1,
+            "falsePositiveRate": 0,
+            "matchRadiusNm": 130
+          },
+          "multiple": {
+            "frames": 240,
+            "rmsPerAxisErrorNm": 27.913921846447412,
+            "matchedCount": 344,
+            "activeEmitterFrames": 529,
+            "missedCount": 185,
+            "falsePositiveCount": 91,
+            "detectionRecall": 0.6502835538752363,
+            "falsePositiveRate": 0.20919540229885059,
+            "matchRadiusNm": 130
+          }
+        }
+      },
+      "current": {
+        "cameraSha256": "c8b96ba27f056b8494181eeedbae81e08a63ef7c9bcd4bf53d0aed77af3782c9",
+        "frames": 2000,
+        "labelsEverOn": 325,
+        "fractionLabelsEverOn": 0.5416666666666666,
+        "meanActive": 0.5695,
+        "acceptedFits": 868,
+        "rmsPerAxisErrorNm": 2.1979095946986407,
+        "matchedCount": 868,
+        "activeEmitterFrames": 1139,
+        "missedCount": 271,
+        "falsePositiveCount": 0,
+        "detectionRecall": 0.762071992976295,
+        "falsePositiveRate": 0,
+        "matchRadiusNm": 130,
+        "medianFittedPhotons": 5007.771397841744,
+        "p90FittedPhotons": 5107.9116084327225,
+        "medianThompsonNm": 2.006084233613456,
+        "shape": {
+          "medianDistanceNm": 1.4387372287728795,
+          "p90DistanceNm": 3.5224813193954105,
+          "rmsDistanceNm": 2.122153509963322,
+          "fractionWithin10Nm": 1
+        },
+        "framing": {
+          "view": {
+            "x0": 3320,
+            "y0": 3320,
+            "sizeNm": 3600
+          },
+          "labelsInView": 600,
+          "fitsInView": 868
+        },
+        "groups": {
+          "empty": {
+            "frames": 1150,
+            "rmsPerAxisErrorNm": null,
+            "matchedCount": 0,
+            "activeEmitterFrames": 0,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": null,
+            "falsePositiveRate": null,
+            "matchRadiusNm": 130
+          },
+          "single": {
+            "frames": 610,
+            "rmsPerAxisErrorNm": 2.112890043214722,
+            "matchedCount": 610,
+            "activeEmitterFrames": 610,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": 1,
+            "falsePositiveRate": 0,
+            "matchRadiusNm": 130
+          },
+          "multiple": {
+            "frames": 240,
+            "rmsPerAxisErrorNm": 2.386910747835173,
+            "matchedCount": 258,
+            "activeEmitterFrames": 529,
+            "missedCount": 271,
+            "falsePositiveCount": 0,
+            "detectionRecall": 0.4877126654064272,
+            "falsePositiveRate": 0,
+            "matchRadiusNm": 130
+          }
+        }
+      },
+      "qualityChecks": {
+        "rmsPerAxisBelow4Nm": true,
+        "noUnmatchedFits": true,
+        "recallAtLeast50Percent": true,
+        "geometryWithin10NmAtLeast99Percent": true
+      }
+    },
+    {
+      "kind": "ring",
+      "regime": "preset-default",
+      "labels": 120,
+      "seed": 42,
+      "truthSha256": "57a8f41bd2f1f3bd7582a2c6c7672fcf42d9cfb141aad76b3d51b0d2bd3ca0ef",
+      "historical": {
+        "cameraSha256": "d16e504335b6e2d1ad461b1d04e5506d9b2b16e0931d80cf7974165174e93268",
+        "frames": 2000,
+        "labelsEverOn": 66,
+        "fractionLabelsEverOn": 0.55,
+        "meanActive": 0.1075,
+        "acceptedFits": 209,
+        "rmsPerAxisErrorNm": 3.249987795719913,
+        "matchedCount": 209,
+        "activeEmitterFrames": 215,
+        "missedCount": 6,
+        "falsePositiveCount": 0,
+        "detectionRecall": 0.9720930232558139,
+        "falsePositiveRate": 0,
+        "matchRadiusNm": 130,
+        "medianFittedPhotons": 5005.79106510975,
+        "p90FittedPhotons": 5101.564195578563,
+        "medianThompsonNm": 2.0065048447661527,
+        "shape": {
+          "medianDistanceNm": 1.4736204642343438,
+          "p90DistanceNm": 3.8128751675923525,
+          "rmsDistanceNm": 3.340651673695053,
+          "fractionWithin10Nm": 0.9856459330143541
+        },
+        "framing": {
+          "view": {
+            "x0": 4870,
+            "y0": 4870,
+            "sizeNm": 500
+          },
+          "labelsInView": 120,
+          "fitsInView": 209
+        },
+        "groups": {
+          "empty": {
+            "frames": 1791,
+            "rmsPerAxisErrorNm": null,
+            "matchedCount": 0,
+            "activeEmitterFrames": 0,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": null,
+            "falsePositiveRate": null,
+            "matchRadiusNm": 130
+          },
+          "single": {
+            "frames": 203,
+            "rmsPerAxisErrorNm": 2.137023841661328,
+            "matchedCount": 203,
+            "activeEmitterFrames": 203,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": 1,
+            "falsePositiveRate": 0,
+            "matchRadiusNm": 130
+          },
+          "multiple": {
+            "frames": 6,
+            "rmsPerAxisErrorNm": 14.608622612754864,
+            "matchedCount": 6,
+            "activeEmitterFrames": 12,
+            "missedCount": 6,
+            "falsePositiveCount": 0,
+            "detectionRecall": 0.5,
+            "falsePositiveRate": 0,
+            "matchRadiusNm": 130
+          }
+        },
+        "ring": {
+          "medianRadiusNm": 29.92056730747184,
+          "p10RadiusNm": 26.956223490114276,
+          "p90RadiusNm": 33.28518949492585,
+          "fractionInsideRadius15Nm": 0.014354066985645933
+        }
+      },
+      "current": {
+        "cameraSha256": "d16e504335b6e2d1ad461b1d04e5506d9b2b16e0931d80cf7974165174e93268",
+        "frames": 2000,
+        "labelsEverOn": 66,
+        "fractionLabelsEverOn": 0.55,
+        "meanActive": 0.1075,
+        "acceptedFits": 203,
+        "rmsPerAxisErrorNm": 2.168977787091985,
+        "matchedCount": 203,
+        "activeEmitterFrames": 215,
+        "missedCount": 12,
+        "falsePositiveCount": 0,
+        "detectionRecall": 0.9441860465116279,
+        "falsePositiveRate": 0,
+        "matchRadiusNm": 130,
+        "medianFittedPhotons": 4992.0575892864845,
+        "p90FittedPhotons": 5092.597884526747,
+        "medianThompsonNm": 2.009416589272644,
+        "shape": {
+          "medianDistanceNm": 1.496495774607581,
+          "p90DistanceNm": 3.688194699368033,
+          "rmsDistanceNm": 2.2770586541805033,
+          "fractionWithin10Nm": 1
+        },
+        "framing": {
+          "view": {
+            "x0": 4995,
+            "y0": 4995,
+            "sizeNm": 250
+          },
+          "labelsInView": 120,
+          "fitsInView": 203
+        },
+        "groups": {
+          "empty": {
+            "frames": 1791,
+            "rmsPerAxisErrorNm": null,
+            "matchedCount": 0,
+            "activeEmitterFrames": 0,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": null,
+            "falsePositiveRate": null,
+            "matchRadiusNm": 130
+          },
+          "single": {
+            "frames": 203,
+            "rmsPerAxisErrorNm": 2.168977787091985,
+            "matchedCount": 203,
+            "activeEmitterFrames": 203,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": 1,
+            "falsePositiveRate": 0,
+            "matchRadiusNm": 130
+          },
+          "multiple": {
+            "frames": 6,
+            "rmsPerAxisErrorNm": null,
+            "matchedCount": 0,
+            "activeEmitterFrames": 12,
+            "missedCount": 12,
+            "falsePositiveCount": 0,
+            "detectionRecall": 0,
+            "falsePositiveRate": null,
+            "matchRadiusNm": 130
+          }
+        },
+        "ring": {
+          "medianRadiusNm": 29.994087114430677,
+          "p10RadiusNm": 27.21982776788154,
+          "p90RadiusNm": 32.9877204573146,
+          "fractionInsideRadius15Nm": 0
+        }
+      },
+      "qualityChecks": {
+        "rmsPerAxisBelow4Nm": true,
+        "noUnmatchedFits": true,
+        "recallAtLeast50Percent": true,
+        "geometryWithin10NmAtLeast99Percent": true
+      }
+    },
+    {
+      "kind": "actin",
+      "regime": "preset-default",
+      "labels": 500,
+      "seed": 42,
+      "truthSha256": "01853f866c0cae53fe8079e78a58a524d24ae485e052af0cffbce540e5ddad05",
+      "historical": {
+        "cameraSha256": "90c6fa9bdfd4f30206f1be6b786139a1f54ffbab6bbd05d7b3d5277a9fea1c2c",
+        "frames": 2000,
+        "labelsEverOn": 257,
+        "fractionLabelsEverOn": 0.514,
+        "meanActive": 0.482,
+        "acceptedFits": 874,
+        "rmsPerAxisErrorNm": 16.359596638671164,
+        "matchedCount": 811,
+        "activeEmitterFrames": 964,
+        "missedCount": 153,
+        "falsePositiveCount": 63,
+        "detectionRecall": 0.8412863070539419,
+        "falsePositiveRate": 0.07208237986270023,
+        "matchRadiusNm": 130,
+        "medianFittedPhotons": 5030.648215440412,
+        "p90FittedPhotons": 9184.221312337751,
+        "medianThompsonNm": 2.0011193844046526,
+        "shape": {
+          "medianDistanceNm": 1.871026612080641,
+          "p90DistanceNm": 14.404669091055439,
+          "rmsDistanceNm": 22.993185578471838,
+          "fractionWithin10Nm": 0.8867276887871853
+        },
+        "framing": {
+          "view": {
+            "x0": 4120,
+            "y0": 4120,
+            "sizeNm": 2000
+          },
+          "labelsInView": 500,
+          "fitsInView": 874
+        },
+        "groups": {
+          "empty": {
+            "frames": 1227,
+            "rmsPerAxisErrorNm": null,
+            "matchedCount": 0,
+            "activeEmitterFrames": 0,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": null,
+            "falsePositiveRate": null,
+            "matchRadiusNm": 130
+          },
+          "single": {
+            "frames": 601,
+            "rmsPerAxisErrorNm": 2.188600203788413,
+            "matchedCount": 601,
+            "activeEmitterFrames": 601,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": 1,
+            "falsePositiveRate": 0,
+            "matchRadiusNm": 130
+          },
+          "multiple": {
+            "frames": 172,
+            "rmsPerAxisErrorNm": 31.935526544074566,
+            "matchedCount": 210,
+            "activeEmitterFrames": 363,
+            "missedCount": 153,
+            "falsePositiveCount": 63,
+            "detectionRecall": 0.5785123966942148,
+            "falsePositiveRate": 0.23076923076923078,
+            "matchRadiusNm": 130
+          }
+        }
+      },
+      "current": {
+        "cameraSha256": "90c6fa9bdfd4f30206f1be6b786139a1f54ffbab6bbd05d7b3d5277a9fea1c2c",
+        "frames": 2000,
+        "labelsEverOn": 257,
+        "fractionLabelsEverOn": 0.514,
+        "meanActive": 0.482,
+        "acceptedFits": 742,
+        "rmsPerAxisErrorNm": 2.2226791463885154,
+        "matchedCount": 742,
+        "activeEmitterFrames": 964,
+        "missedCount": 222,
+        "falsePositiveCount": 0,
+        "detectionRecall": 0.7697095435684648,
+        "falsePositiveRate": 0,
+        "matchRadiusNm": 130,
+        "medianFittedPhotons": 5004.973424287431,
+        "p90FittedPhotons": 5103.560509302802,
+        "medianThompsonNm": 2.006676075221897,
+        "shape": {
+          "medianDistanceNm": 1.544405427572201,
+          "p90DistanceNm": 3.7177500506886645,
+          "rmsDistanceNm": 2.2580744919533204,
+          "fractionWithin10Nm": 1
+        },
+        "framing": {
+          "view": {
+            "x0": 3920,
+            "y0": 3920,
+            "sizeNm": 2400
+          },
+          "labelsInView": 500,
+          "fitsInView": 742
+        },
+        "groups": {
+          "empty": {
+            "frames": 1227,
+            "rmsPerAxisErrorNm": null,
+            "matchedCount": 0,
+            "activeEmitterFrames": 0,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": null,
+            "falsePositiveRate": null,
+            "matchRadiusNm": 130
+          },
+          "single": {
+            "frames": 601,
+            "rmsPerAxisErrorNm": 2.212827426748542,
+            "matchedCount": 601,
+            "activeEmitterFrames": 601,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": 1,
+            "falsePositiveRate": 0,
+            "matchRadiusNm": 130
+          },
+          "multiple": {
+            "frames": 172,
+            "rmsPerAxisErrorNm": 2.264190526807481,
+            "matchedCount": 141,
+            "activeEmitterFrames": 363,
+            "missedCount": 222,
+            "falsePositiveCount": 0,
+            "detectionRecall": 0.3884297520661157,
+            "falsePositiveRate": 0,
+            "matchRadiusNm": 130
+          }
+        }
+      },
+      "qualityChecks": {
+        "rmsPerAxisBelow4Nm": true,
+        "noUnmatchedFits": true,
+        "recallAtLeast50Percent": true,
+        "geometryWithin10NmAtLeast99Percent": true
+      }
+    },
+    {
+      "kind": "image",
+      "regime": "preset-default",
+      "labels": 2000,
+      "seed": 42,
+      "truthSha256": "15f9df82db69c55a450ff11ad67dac8daf44a6b950c3cdc748a3b84ea04f61a6",
+      "historical": {
+        "cameraSha256": "8a99e3535f1fbbd13dc63d57b212f6a753773e82ce572f92c4d751487512881f",
+        "frames": 2000,
+        "labelsEverOn": 1115,
+        "fractionLabelsEverOn": 0.5575,
+        "meanActive": 2.057,
+        "acceptedFits": 3499,
+        "rmsPerAxisErrorNm": 20.598258457574648,
+        "matchedCount": 3079,
+        "activeEmitterFrames": 4114,
+        "missedCount": 1035,
+        "falsePositiveCount": 420,
+        "detectionRecall": 0.7484200291686923,
+        "falsePositiveRate": 0.12003429551300372,
+        "matchRadiusNm": 130,
+        "medianFittedPhotons": 5061.617469120831,
+        "p90FittedPhotons": 10006.374295307347,
+        "medianThompsonNm": 1.9947971506478819,
+        "shape": {
+          "medianDistanceNm": 0,
+          "p90DistanceNm": 0.5911859703255686,
+          "rmsDistanceNm": 14.84120112242954,
+          "fractionWithin10Nm": 0.9994284081166047
+        },
+        "framing": {
+          "view": {
+            "x0": 2052.0541102895513,
+            "y0": 2050.2729609494563,
+            "sizeNm": 6139.430812887847
+          },
+          "labelsInView": 2000,
+          "fitsInView": 3499
+        },
+        "groups": {
+          "empty": {
+            "frames": 257,
+            "rmsPerAxisErrorNm": null,
+            "matchedCount": 0,
+            "activeEmitterFrames": 0,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": null,
+            "falsePositiveRate": null,
+            "matchRadiusNm": 130
+          },
+          "single": {
+            "frames": 510,
+            "rmsPerAxisErrorNm": 2.147423553705487,
+            "matchedCount": 510,
+            "activeEmitterFrames": 510,
+            "missedCount": 0,
+            "falsePositiveCount": 1,
+            "detectionRecall": 1,
+            "falsePositiveRate": 0.0019569471624266144,
+            "matchRadiusNm": 130
+          },
+          "multiple": {
+            "frames": 1233,
+            "rmsPerAxisErrorNm": 22.53004307201137,
+            "matchedCount": 2569,
+            "activeEmitterFrames": 3604,
+            "missedCount": 1035,
+            "falsePositiveCount": 419,
+            "detectionRecall": 0.712819089900111,
+            "falsePositiveRate": 0.14022757697456492,
+            "matchRadiusNm": 130
+          }
+        }
+      },
+      "current": {
+        "cameraSha256": "8a99e3535f1fbbd13dc63d57b212f6a753773e82ce572f92c4d751487512881f",
+        "frames": 2000,
+        "labelsEverOn": 1115,
+        "fractionLabelsEverOn": 0.5575,
+        "meanActive": 2.057,
+        "acceptedFits": 2527,
+        "rmsPerAxisErrorNm": 2.285534360399548,
+        "matchedCount": 2527,
+        "activeEmitterFrames": 4114,
+        "missedCount": 1587,
+        "falsePositiveCount": 0,
+        "detectionRecall": 0.6142440447253281,
+        "falsePositiveRate": 0,
+        "matchRadiusNm": 130,
+        "medianFittedPhotons": 5005.107921993814,
+        "p90FittedPhotons": 5102.702039607248,
+        "medianThompsonNm": 2.006649385481774,
+        "shape": {
+          "medianDistanceNm": 0,
+          "p90DistanceNm": 1.0245420548380935,
+          "rmsDistanceNm": 0.790676030788388,
+          "fractionWithin10Nm": 1
+        },
+        "framing": {
+          "view": {
+            "x0": 0,
+            "y0": 0,
+            "sizeNm": 10240
+          },
+          "labelsInView": 2000,
+          "fitsInView": 2527
+        },
+        "groups": {
+          "empty": {
+            "frames": 257,
+            "rmsPerAxisErrorNm": null,
+            "matchedCount": 0,
+            "activeEmitterFrames": 0,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": null,
+            "falsePositiveRate": null,
+            "matchRadiusNm": 130
+          },
+          "single": {
+            "frames": 510,
+            "rmsPerAxisErrorNm": 2.1970383262236255,
+            "matchedCount": 510,
+            "activeEmitterFrames": 510,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": 1,
+            "falsePositiveRate": 0,
+            "matchRadiusNm": 130
+          },
+          "multiple": {
+            "frames": 1233,
+            "rmsPerAxisErrorNm": 2.307373108116569,
+            "matchedCount": 2017,
+            "activeEmitterFrames": 3604,
+            "missedCount": 1587,
+            "falsePositiveCount": 0,
+            "detectionRecall": 0.5596559378468369,
+            "falsePositiveRate": 0,
+            "matchRadiusNm": 130
+          }
+        }
+      },
+      "qualityChecks": {
+        "rmsPerAxisBelow4Nm": true,
+        "noUnmatchedFits": true,
+        "recallAtLeast50Percent": true,
+        "geometryWithin10NmAtLeast99Percent": true
+      }
+    },
+    {
+      "kind": "two-lines",
+      "regime": "preset-default",
+      "labels": 600,
+      "seed": 20260912,
+      "truthSha256": "4d6d085f3dc6f5edcee536d2539eb002476197d68396745a6e66a4809385462f",
+      "historical": {
+        "cameraSha256": "b92b0bb7ab0571bd8b40a6b08e92b2a41a0712e01116d4c4fd0cb32885bcb749",
+        "frames": 2000,
+        "labelsEverOn": 309,
+        "fractionLabelsEverOn": 0.515,
+        "meanActive": 0.525,
+        "acceptedFits": 971,
+        "rmsPerAxisErrorNm": 15.815863767690788,
+        "matchedCount": 919,
+        "activeEmitterFrames": 1050,
+        "missedCount": 131,
+        "falsePositiveCount": 52,
+        "detectionRecall": 0.8752380952380953,
+        "falsePositiveRate": 0.053553038105046344,
+        "matchRadiusNm": 130,
+        "medianFittedPhotons": 5015.383955678356,
+        "p90FittedPhotons": 7917.809587783746,
+        "medianThompsonNm": 2.0044784437926397,
+        "shape": {
+          "medianDistanceNm": 1.6052027138257472,
+          "p90DistanceNm": 4.460329588744571,
+          "rmsDistanceNm": 5.716009738644265,
+          "fractionWithin10Nm": 0.9443872296601442
+        },
+        "framing": {
+          "view": {
+            "x0": 4620,
+            "y0": 4620,
+            "sizeNm": 1000
+          },
+          "labelsInView": 200,
+          "fitsInView": 273
+        },
+        "groups": {
+          "empty": {
+            "frames": 1179,
+            "rmsPerAxisErrorNm": null,
+            "matchedCount": 0,
+            "activeEmitterFrames": 0,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": null,
+            "falsePositiveRate": null,
+            "matchRadiusNm": 130
+          },
+          "single": {
+            "frames": 621,
+            "rmsPerAxisErrorNm": 2.229611629495555,
+            "matchedCount": 621,
+            "activeEmitterFrames": 621,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": 1,
+            "falsePositiveRate": 0,
+            "matchRadiusNm": 130
+          },
+          "multiple": {
+            "frames": 200,
+            "rmsPerAxisErrorNm": 27.587139918954055,
+            "matchedCount": 298,
+            "activeEmitterFrames": 429,
+            "missedCount": 131,
+            "falsePositiveCount": 52,
+            "detectionRecall": 0.6946386946386947,
+            "falsePositiveRate": 0.14857142857142858,
+            "matchRadiusNm": 130
+          }
+        }
+      },
+      "current": {
+        "cameraSha256": "b92b0bb7ab0571bd8b40a6b08e92b2a41a0712e01116d4c4fd0cb32885bcb749",
+        "frames": 2000,
+        "labelsEverOn": 309,
+        "fractionLabelsEverOn": 0.515,
+        "meanActive": 0.525,
+        "acceptedFits": 847,
+        "rmsPerAxisErrorNm": 2.294195713527261,
+        "matchedCount": 847,
+        "activeEmitterFrames": 1050,
+        "missedCount": 203,
+        "falsePositiveCount": 0,
+        "detectionRecall": 0.8066666666666666,
+        "falsePositiveRate": 0,
+        "matchRadiusNm": 130,
+        "medianFittedPhotons": 4998.514063861903,
+        "p90FittedPhotons": 5093.869284102266,
+        "medianThompsonNm": 2.0080461282613733,
+        "shape": {
+          "medianDistanceNm": 1.5074873031226161,
+          "p90DistanceNm": 3.591417650499352,
+          "rmsDistanceNm": 2.225404258140284,
+          "fractionWithin10Nm": 1
+        },
+        "framing": {
+          "view": {
+            "x0": 3320,
+            "y0": 3320,
+            "sizeNm": 3600
+          },
+          "labelsInView": 600,
+          "fitsInView": 847
+        },
+        "groups": {
+          "empty": {
+            "frames": 1179,
+            "rmsPerAxisErrorNm": null,
+            "matchedCount": 0,
+            "activeEmitterFrames": 0,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": null,
+            "falsePositiveRate": null,
+            "matchRadiusNm": 130
+          },
+          "single": {
+            "frames": 621,
+            "rmsPerAxisErrorNm": 2.2441345264774273,
+            "matchedCount": 621,
+            "activeEmitterFrames": 621,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": 1,
+            "falsePositiveRate": 0,
+            "matchRadiusNm": 130
+          },
+          "multiple": {
+            "frames": 200,
+            "rmsPerAxisErrorNm": 2.4264408868320415,
+            "matchedCount": 226,
+            "activeEmitterFrames": 429,
+            "missedCount": 203,
+            "falsePositiveCount": 0,
+            "detectionRecall": 0.5268065268065268,
+            "falsePositiveRate": 0,
+            "matchRadiusNm": 130
+          }
+        }
+      },
+      "qualityChecks": {
+        "rmsPerAxisBelow4Nm": true,
+        "noUnmatchedFits": true,
+        "recallAtLeast50Percent": true,
+        "geometryWithin10NmAtLeast99Percent": true
+      }
+    },
+    {
+      "kind": "ring",
+      "regime": "preset-default",
+      "labels": 120,
+      "seed": 20260912,
+      "truthSha256": "57a8f41bd2f1f3bd7582a2c6c7672fcf42d9cfb141aad76b3d51b0d2bd3ca0ef",
+      "historical": {
+        "cameraSha256": "a411fa3c8ace2d67a2e55bc712b0e8c66397562950fd9ed90eab00cbcbbc19a2",
+        "frames": 2000,
+        "labelsEverOn": 62,
+        "fractionLabelsEverOn": 0.5166666666666667,
+        "meanActive": 0.1105,
+        "acceptedFits": 209,
+        "rmsPerAxisErrorNm": 3.3477684110621007,
+        "matchedCount": 209,
+        "activeEmitterFrames": 221,
+        "missedCount": 12,
+        "falsePositiveCount": 0,
+        "detectionRecall": 0.9457013574660633,
+        "falsePositiveRate": 0,
+        "matchRadiusNm": 130,
+        "medianFittedPhotons": 5000.593577571873,
+        "p90FittedPhotons": 5134.751030502964,
+        "medianThompsonNm": 2.0076053219935996,
+        "shape": {
+          "medianDistanceNm": 1.78707727909552,
+          "p90DistanceNm": 3.8474882823660934,
+          "rmsDistanceNm": 2.84219400438538,
+          "fractionWithin10Nm": 0.9952153110047847
+        },
+        "framing": {
+          "view": {
+            "x0": 4870,
+            "y0": 4870,
+            "sizeNm": 500
+          },
+          "labelsInView": 120,
+          "fitsInView": 209
+        },
+        "groups": {
+          "empty": {
+            "frames": 1791,
+            "rmsPerAxisErrorNm": null,
+            "matchedCount": 0,
+            "activeEmitterFrames": 0,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": null,
+            "falsePositiveRate": null,
+            "matchRadiusNm": 130
+          },
+          "single": {
+            "frames": 197,
+            "rmsPerAxisErrorNm": 2.2091613212766203,
+            "matchedCount": 197,
+            "activeEmitterFrames": 197,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": 1,
+            "falsePositiveRate": 0,
+            "matchRadiusNm": 130
+          },
+          "multiple": {
+            "frames": 12,
+            "rmsPerAxisErrorNm": 10.727461175931229,
+            "matchedCount": 12,
+            "activeEmitterFrames": 24,
+            "missedCount": 12,
+            "falsePositiveCount": 0,
+            "detectionRecall": 0.5,
+            "falsePositiveRate": 0,
+            "matchRadiusNm": 130
+          }
+        },
+        "ring": {
+          "medianRadiusNm": 30.09547643746231,
+          "p10RadiusNm": 26.51703326458966,
+          "p90RadiusNm": 32.79007568126517,
+          "fractionInsideRadius15Nm": 0.004784688995215311
+        }
+      },
+      "current": {
+        "cameraSha256": "a411fa3c8ace2d67a2e55bc712b0e8c66397562950fd9ed90eab00cbcbbc19a2",
+        "frames": 2000,
+        "labelsEverOn": 62,
+        "fractionLabelsEverOn": 0.5166666666666667,
+        "meanActive": 0.1105,
+        "acceptedFits": 197,
+        "rmsPerAxisErrorNm": 2.2550534058716734,
+        "matchedCount": 197,
+        "activeEmitterFrames": 221,
+        "missedCount": 24,
+        "falsePositiveCount": 0,
+        "detectionRecall": 0.8914027149321267,
+        "falsePositiveRate": 0,
+        "matchRadiusNm": 130,
+        "medianFittedPhotons": 4992.919557998019,
+        "p90FittedPhotons": 5100.674591839032,
+        "medianThompsonNm": 2.0092334647891077,
+        "shape": {
+          "medianDistanceNm": 1.8172256314749404,
+          "p90DistanceNm": 3.6534358396122073,
+          "rmsDistanceNm": 2.3661936558042496,
+          "fractionWithin10Nm": 1
+        },
+        "framing": {
+          "view": {
+            "x0": 4995,
+            "y0": 4995,
+            "sizeNm": 250
+          },
+          "labelsInView": 120,
+          "fitsInView": 197
+        },
+        "groups": {
+          "empty": {
+            "frames": 1791,
+            "rmsPerAxisErrorNm": null,
+            "matchedCount": 0,
+            "activeEmitterFrames": 0,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": null,
+            "falsePositiveRate": null,
+            "matchRadiusNm": 130
+          },
+          "single": {
+            "frames": 197,
+            "rmsPerAxisErrorNm": 2.2550534058716734,
+            "matchedCount": 197,
+            "activeEmitterFrames": 197,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": 1,
+            "falsePositiveRate": 0,
+            "matchRadiusNm": 130
+          },
+          "multiple": {
+            "frames": 12,
+            "rmsPerAxisErrorNm": null,
+            "matchedCount": 0,
+            "activeEmitterFrames": 24,
+            "missedCount": 24,
+            "falsePositiveCount": 0,
+            "detectionRecall": 0,
+            "falsePositiveRate": null,
+            "matchRadiusNm": 130
+          }
+        },
+        "ring": {
+          "medianRadiusNm": 30.050954906401845,
+          "p10RadiusNm": 26.86425061664071,
+          "p90RadiusNm": 33.1938841191445,
+          "fractionInsideRadius15Nm": 0
+        }
+      },
+      "qualityChecks": {
+        "rmsPerAxisBelow4Nm": true,
+        "noUnmatchedFits": true,
+        "recallAtLeast50Percent": true,
+        "geometryWithin10NmAtLeast99Percent": true
+      }
+    },
+    {
+      "kind": "actin",
+      "regime": "preset-default",
+      "labels": 500,
+      "seed": 20260912,
+      "truthSha256": "01853f866c0cae53fe8079e78a58a524d24ae485e052af0cffbce540e5ddad05",
+      "historical": {
+        "cameraSha256": "c1782a97d974f36a9ad5631d90bc6667b619a130a002bd27b99a1a94d38a429a",
+        "frames": 2000,
+        "labelsEverOn": 275,
+        "fractionLabelsEverOn": 0.55,
+        "meanActive": 0.499,
+        "acceptedFits": 913,
+        "rmsPerAxisErrorNm": 19.201773509963303,
+        "matchedCount": 860,
+        "activeEmitterFrames": 998,
+        "missedCount": 138,
+        "falsePositiveCount": 53,
+        "detectionRecall": 0.8617234468937875,
+        "falsePositiveRate": 0.05805038335158817,
+        "matchRadiusNm": 130,
+        "medianFittedPhotons": 5025.260458816066,
+        "p90FittedPhotons": 8142.770275335578,
+        "medianThompsonNm": 2.002398510211494,
+        "shape": {
+          "medianDistanceNm": 1.7740772360093615,
+          "p90DistanceNm": 33.69460634486222,
+          "rmsDistanceNm": 26.32020318106101,
+          "fractionWithin10Nm": 0.8685651697699891
+        },
+        "framing": {
+          "view": {
+            "x0": 4120,
+            "y0": 4120,
+            "sizeNm": 2000
+          },
+          "labelsInView": 500,
+          "fitsInView": 913
+        },
+        "groups": {
+          "empty": {
+            "frames": 1197,
+            "rmsPerAxisErrorNm": null,
+            "matchedCount": 0,
+            "activeEmitterFrames": 0,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": null,
+            "falsePositiveRate": null,
+            "matchRadiusNm": 130
+          },
+          "single": {
+            "frames": 639,
+            "rmsPerAxisErrorNm": 2.1402594801371495,
+            "matchedCount": 639,
+            "activeEmitterFrames": 639,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": 1,
+            "falsePositiveRate": 0,
+            "matchRadiusNm": 130
+          },
+          "multiple": {
+            "frames": 164,
+            "rmsPerAxisErrorNm": 37.70340893391353,
+            "matchedCount": 221,
+            "activeEmitterFrames": 359,
+            "missedCount": 138,
+            "falsePositiveCount": 53,
+            "detectionRecall": 0.6155988857938719,
+            "falsePositiveRate": 0.19343065693430658,
+            "matchRadiusNm": 130
+          }
+        }
+      },
+      "current": {
+        "cameraSha256": "c1782a97d974f36a9ad5631d90bc6667b619a130a002bd27b99a1a94d38a429a",
+        "frames": 2000,
+        "labelsEverOn": 275,
+        "fractionLabelsEverOn": 0.55,
+        "meanActive": 0.499,
+        "acceptedFits": 772,
+        "rmsPerAxisErrorNm": 2.185583502058602,
+        "matchedCount": 772,
+        "activeEmitterFrames": 998,
+        "missedCount": 226,
+        "falsePositiveCount": 0,
+        "detectionRecall": 0.7735470941883767,
+        "falsePositiveRate": 0,
+        "matchRadiusNm": 130,
+        "medianFittedPhotons": 4998.200675580658,
+        "p90FittedPhotons": 5094.911333324426,
+        "medianThompsonNm": 2.0080810124410293,
+        "shape": {
+          "medianDistanceNm": 1.4458915496325062,
+          "p90DistanceNm": 3.6287210150667306,
+          "rmsDistanceNm": 2.187026788069263,
+          "fractionWithin10Nm": 1
+        },
+        "framing": {
+          "view": {
+            "x0": 3920,
+            "y0": 3920,
+            "sizeNm": 2400
+          },
+          "labelsInView": 500,
+          "fitsInView": 772
+        },
+        "groups": {
+          "empty": {
+            "frames": 1197,
+            "rmsPerAxisErrorNm": null,
+            "matchedCount": 0,
+            "activeEmitterFrames": 0,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": null,
+            "falsePositiveRate": null,
+            "matchRadiusNm": 130
+          },
+          "single": {
+            "frames": 639,
+            "rmsPerAxisErrorNm": 2.1675257794830975,
+            "matchedCount": 639,
+            "activeEmitterFrames": 639,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": 1,
+            "falsePositiveRate": 0,
+            "matchRadiusNm": 130
+          },
+          "multiple": {
+            "frames": 164,
+            "rmsPerAxisErrorNm": 2.2703401979401043,
+            "matchedCount": 133,
+            "activeEmitterFrames": 359,
+            "missedCount": 226,
+            "falsePositiveCount": 0,
+            "detectionRecall": 0.37047353760445684,
+            "falsePositiveRate": 0,
+            "matchRadiusNm": 130
+          }
+        }
+      },
+      "qualityChecks": {
+        "rmsPerAxisBelow4Nm": true,
+        "noUnmatchedFits": true,
+        "recallAtLeast50Percent": true,
+        "geometryWithin10NmAtLeast99Percent": true
+      }
+    },
+    {
+      "kind": "image",
+      "regime": "preset-default",
+      "labels": 2000,
+      "seed": 20260912,
+      "truthSha256": "11214f886497dae01e5fb1ae86186e93af2448a26da3833f52871868a34f021d",
+      "historical": {
+        "cameraSha256": "1391da51bff089a298c3409e0ce2d19bf651d32d950587630c548aaebe1559d3",
+        "frames": 2000,
+        "labelsEverOn": 1096,
+        "fractionLabelsEverOn": 0.548,
+        "meanActive": 1.941,
+        "acceptedFits": 3281,
+        "rmsPerAxisErrorNm": 21.118871258235696,
+        "matchedCount": 2914,
+        "activeEmitterFrames": 3882,
+        "missedCount": 968,
+        "falsePositiveCount": 367,
+        "detectionRecall": 0.7506439979392066,
+        "falsePositiveRate": 0.11185614142029869,
+        "matchRadiusNm": 130,
+        "medianFittedPhotons": 5062.687865798749,
+        "p90FittedPhotons": 10046.309691309945,
+        "medianThompsonNm": 1.9945746621324534,
+        "shape": {
+          "medianDistanceNm": 0,
+          "p90DistanceNm": 0.48758336197988683,
+          "rmsDistanceNm": 0.6153863307783335,
+          "fractionWithin10Nm": 1
+        },
+        "framing": {
+          "view": {
+            "x0": 2050.441924211569,
+            "y0": 2054.074325727066,
+            "sizeNm": 6131.85126426816
+          },
+          "labelsInView": 2000,
+          "fitsInView": 3281
+        },
+        "groups": {
+          "empty": {
+            "frames": 305,
+            "rmsPerAxisErrorNm": null,
+            "matchedCount": 0,
+            "activeEmitterFrames": 0,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": null,
+            "falsePositiveRate": null,
+            "matchRadiusNm": 130
+          },
+          "single": {
+            "frames": 553,
+            "rmsPerAxisErrorNm": 2.1509270338806994,
+            "matchedCount": 553,
+            "activeEmitterFrames": 553,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": 1,
+            "falsePositiveRate": 0,
+            "matchRadiusNm": 130
+          },
+          "multiple": {
+            "frames": 1142,
+            "rmsPerAxisErrorNm": 23.43902797114117,
+            "matchedCount": 2361,
+            "activeEmitterFrames": 3329,
+            "missedCount": 968,
+            "falsePositiveCount": 367,
+            "detectionRecall": 0.7092219885851607,
+            "falsePositiveRate": 0.1345307917888563,
+            "matchRadiusNm": 130
+          }
+        }
+      },
+      "current": {
+        "cameraSha256": "1391da51bff089a298c3409e0ce2d19bf651d32d950587630c548aaebe1559d3",
+        "frames": 2000,
+        "labelsEverOn": 1096,
+        "fractionLabelsEverOn": 0.548,
+        "meanActive": 1.941,
+        "acceptedFits": 2349,
+        "rmsPerAxisErrorNm": 2.249471869053995,
+        "matchedCount": 2349,
+        "activeEmitterFrames": 3882,
+        "missedCount": 1533,
+        "falsePositiveCount": 0,
+        "detectionRecall": 0.6051004636785162,
+        "falsePositiveRate": 0,
+        "matchRadiusNm": 130,
+        "medianFittedPhotons": 5002.726295210334,
+        "p90FittedPhotons": 5098.992710012543,
+        "medianThompsonNm": 2.0071535380708623,
+        "shape": {
+          "medianDistanceNm": 0,
+          "p90DistanceNm": 0.9307648793601402,
+          "rmsDistanceNm": 0.7402574862654622,
+          "fractionWithin10Nm": 1
+        },
+        "framing": {
+          "view": {
+            "x0": 0,
+            "y0": 0,
+            "sizeNm": 10240
+          },
+          "labelsInView": 2000,
+          "fitsInView": 2349
+        },
+        "groups": {
+          "empty": {
+            "frames": 305,
+            "rmsPerAxisErrorNm": null,
+            "matchedCount": 0,
+            "activeEmitterFrames": 0,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": null,
+            "falsePositiveRate": null,
+            "matchRadiusNm": 130
+          },
+          "single": {
+            "frames": 553,
+            "rmsPerAxisErrorNm": 2.210775973191878,
+            "matchedCount": 553,
+            "activeEmitterFrames": 553,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": 1,
+            "falsePositiveRate": 0,
+            "matchRadiusNm": 130
+          },
+          "multiple": {
+            "frames": 1142,
+            "rmsPerAxisErrorNm": 2.2612532536575256,
+            "matchedCount": 1796,
+            "activeEmitterFrames": 3329,
+            "missedCount": 1533,
+            "falsePositiveCount": 0,
+            "detectionRecall": 0.5395013517572844,
+            "falsePositiveRate": 0,
+            "matchRadiusNm": 130
+          }
+        }
+      },
+      "qualityChecks": {
+        "rmsPerAxisBelow4Nm": true,
+        "noUnmatchedFits": true,
+        "recallAtLeast50Percent": true,
+        "geometryWithin10NmAtLeast99Percent": true
+      }
+    },
+    {
+      "kind": "two-lines",
+      "regime": "preset-default",
+      "labels": 600,
+      "seed": 987654321,
+      "truthSha256": "4d6d085f3dc6f5edcee536d2539eb002476197d68396745a6e66a4809385462f",
+      "historical": {
+        "cameraSha256": "0776ac575bb507c61bacbd10a2950aa58db3d60630ada8d5007aac271e65e4c3",
+        "frames": 2000,
+        "labelsEverOn": 339,
+        "fractionLabelsEverOn": 0.565,
+        "meanActive": 0.644,
+        "acceptedFits": 1178,
+        "rmsPerAxisErrorNm": 13.718641844221375,
+        "matchedCount": 1079,
+        "activeEmitterFrames": 1288,
+        "missedCount": 209,
+        "falsePositiveCount": 99,
+        "detectionRecall": 0.8377329192546584,
+        "falsePositiveRate": 0.08404074702886248,
+        "matchRadiusNm": 130,
+        "medianFittedPhotons": 5024.392101925675,
+        "p90FittedPhotons": 8995.236545024702,
+        "medianThompsonNm": 2.0025781006790515,
+        "shape": {
+          "medianDistanceNm": 1.563272390363636,
+          "p90DistanceNm": 4.636439095220339,
+          "rmsDistanceNm": 6.084673863621164,
+          "fractionWithin10Nm": 0.932937181663837
+        },
+        "framing": {
+          "view": {
+            "x0": 4620,
+            "y0": 4620,
+            "sizeNm": 1000
+          },
+          "labelsInView": 200,
+          "fitsInView": 401
+        },
+        "groups": {
+          "empty": {
+            "frames": 1057,
+            "rmsPerAxisErrorNm": null,
+            "matchedCount": 0,
+            "activeEmitterFrames": 0,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": null,
+            "falsePositiveRate": null,
+            "matchRadiusNm": 130
+          },
+          "single": {
+            "frames": 668,
+            "rmsPerAxisErrorNm": 2.136835685322333,
+            "matchedCount": 668,
+            "activeEmitterFrames": 668,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": 1,
+            "falsePositiveRate": 0,
+            "matchRadiusNm": 130
+          },
+          "multiple": {
+            "frames": 275,
+            "rmsPerAxisErrorNm": 22.060461656552988,
+            "matchedCount": 411,
+            "activeEmitterFrames": 620,
+            "missedCount": 209,
+            "falsePositiveCount": 99,
+            "detectionRecall": 0.6629032258064517,
+            "falsePositiveRate": 0.19411764705882353,
+            "matchRadiusNm": 130
+          }
+        }
+      },
+      "current": {
+        "cameraSha256": "0776ac575bb507c61bacbd10a2950aa58db3d60630ada8d5007aac271e65e4c3",
+        "frames": 2000,
+        "labelsEverOn": 339,
+        "fractionLabelsEverOn": 0.565,
+        "meanActive": 0.644,
+        "acceptedFits": 993,
+        "rmsPerAxisErrorNm": 2.217877237736206,
+        "matchedCount": 993,
+        "activeEmitterFrames": 1288,
+        "missedCount": 295,
+        "falsePositiveCount": 0,
+        "detectionRecall": 0.7709627329192547,
+        "falsePositiveRate": 0,
+        "matchRadiusNm": 130,
+        "medianFittedPhotons": 4997.86454524135,
+        "p90FittedPhotons": 5091.461300373977,
+        "medianThompsonNm": 2.008183869692158,
+        "shape": {
+          "medianDistanceNm": 1.4661083884584514,
+          "p90DistanceNm": 3.553325166644754,
+          "rmsDistanceNm": 2.1705183297744663,
+          "fractionWithin10Nm": 1
+        },
+        "framing": {
+          "view": {
+            "x0": 3320,
+            "y0": 3320,
+            "sizeNm": 3600
+          },
+          "labelsInView": 600,
+          "fitsInView": 993
+        },
+        "groups": {
+          "empty": {
+            "frames": 1057,
+            "rmsPerAxisErrorNm": null,
+            "matchedCount": 0,
+            "activeEmitterFrames": 0,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": null,
+            "falsePositiveRate": null,
+            "matchRadiusNm": 130
+          },
+          "single": {
+            "frames": 668,
+            "rmsPerAxisErrorNm": 2.1666008461472908,
+            "matchedCount": 668,
+            "activeEmitterFrames": 668,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": 1,
+            "falsePositiveRate": 0,
+            "matchRadiusNm": 130
+          },
+          "multiple": {
+            "frames": 275,
+            "rmsPerAxisErrorNm": 2.319713657566208,
+            "matchedCount": 325,
+            "activeEmitterFrames": 620,
+            "missedCount": 295,
+            "falsePositiveCount": 0,
+            "detectionRecall": 0.5241935483870968,
+            "falsePositiveRate": 0,
+            "matchRadiusNm": 130
+          }
+        }
+      },
+      "qualityChecks": {
+        "rmsPerAxisBelow4Nm": true,
+        "noUnmatchedFits": true,
+        "recallAtLeast50Percent": true,
+        "geometryWithin10NmAtLeast99Percent": true
+      }
+    },
+    {
+      "kind": "ring",
+      "regime": "preset-default",
+      "labels": 120,
+      "seed": 987654321,
+      "truthSha256": "57a8f41bd2f1f3bd7582a2c6c7672fcf42d9cfb141aad76b3d51b0d2bd3ca0ef",
+      "historical": {
+        "cameraSha256": "87b8fa8412ca341eacdaebc4da0fe465495b85e8eff1071159e0be3035b516a5",
+        "frames": 2000,
+        "labelsEverOn": 68,
+        "fractionLabelsEverOn": 0.5666666666666667,
+        "meanActive": 0.1405,
+        "acceptedFits": 261,
+        "rmsPerAxisErrorNm": 4.805515355774934,
+        "matchedCount": 260,
+        "activeEmitterFrames": 281,
+        "missedCount": 21,
+        "falsePositiveCount": 1,
+        "detectionRecall": 0.9252669039145908,
+        "falsePositiveRate": 0.0038314176245210726,
+        "matchRadiusNm": 130,
+        "medianFittedPhotons": 5003.648793898808,
+        "p90FittedPhotons": 5134.639378663686,
+        "medianThompsonNm": 2.006958214823256,
+        "shape": {
+          "medianDistanceNm": 1.437102723281317,
+          "p90DistanceNm": 5.064756775925929,
+          "rmsDistanceNm": 239.85167805653555,
+          "fractionWithin10Nm": 0.9501915708812261
+        },
+        "framing": {
+          "view": {
+            "x0": 4870,
+            "y0": 4870,
+            "sizeNm": 500
+          },
+          "labelsInView": 120,
+          "fitsInView": 260
+        },
+        "groups": {
+          "empty": {
+            "frames": 1740,
+            "rmsPerAxisErrorNm": null,
+            "matchedCount": 0,
+            "activeEmitterFrames": 0,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": null,
+            "falsePositiveRate": null,
+            "matchRadiusNm": 130
+          },
+          "single": {
+            "frames": 239,
+            "rmsPerAxisErrorNm": 2.2412871795587304,
+            "matchedCount": 239,
+            "activeEmitterFrames": 239,
+            "missedCount": 0,
+            "falsePositiveCount": 1,
+            "detectionRecall": 1,
+            "falsePositiveRate": 0.004166666666666667,
+            "matchRadiusNm": 130
+          },
+          "multiple": {
+            "frames": 21,
+            "rmsPerAxisErrorNm": 15.124230373356083,
+            "matchedCount": 21,
+            "activeEmitterFrames": 42,
+            "missedCount": 21,
+            "falsePositiveCount": 0,
+            "detectionRecall": 0.5,
+            "falsePositiveRate": 0,
+            "matchRadiusNm": 130
+          }
+        },
+        "ring": {
+          "medianRadiusNm": 29.87175103824386,
+          "p10RadiusNm": 25.609195023186825,
+          "p90RadiusNm": 33.12315152257445,
+          "fractionInsideRadius15Nm": 0.011494252873563218
+        }
+      },
+      "current": {
+        "cameraSha256": "87b8fa8412ca341eacdaebc4da0fe465495b85e8eff1071159e0be3035b516a5",
+        "frames": 2000,
+        "labelsEverOn": 68,
+        "fractionLabelsEverOn": 0.5666666666666667,
+        "meanActive": 0.1405,
+        "acceptedFits": 239,
+        "rmsPerAxisErrorNm": 2.2808760319215,
+        "matchedCount": 239,
+        "activeEmitterFrames": 281,
+        "missedCount": 42,
+        "falsePositiveCount": 0,
+        "detectionRecall": 0.8505338078291815,
+        "falsePositiveRate": 0,
+        "matchRadiusNm": 130,
+        "medianFittedPhotons": 4999.880113314191,
+        "p90FittedPhotons": 5088.453947061799,
+        "medianThompsonNm": 2.00775652644841,
+        "shape": {
+          "medianDistanceNm": 1.356786911335032,
+          "p90DistanceNm": 3.7453186393765243,
+          "rmsDistanceNm": 2.2383547434695594,
+          "fractionWithin10Nm": 1
+        },
+        "framing": {
+          "view": {
+            "x0": 4995,
+            "y0": 4995,
+            "sizeNm": 250
+          },
+          "labelsInView": 120,
+          "fitsInView": 239
+        },
+        "groups": {
+          "empty": {
+            "frames": 1740,
+            "rmsPerAxisErrorNm": null,
+            "matchedCount": 0,
+            "activeEmitterFrames": 0,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": null,
+            "falsePositiveRate": null,
+            "matchRadiusNm": 130
+          },
+          "single": {
+            "frames": 239,
+            "rmsPerAxisErrorNm": 2.2808760319215,
+            "matchedCount": 239,
+            "activeEmitterFrames": 239,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": 1,
+            "falsePositiveRate": 0,
+            "matchRadiusNm": 130
+          },
+          "multiple": {
+            "frames": 21,
+            "rmsPerAxisErrorNm": null,
+            "matchedCount": 0,
+            "activeEmitterFrames": 42,
+            "missedCount": 42,
+            "falsePositiveCount": 0,
+            "detectionRecall": 0,
+            "falsePositiveRate": null,
+            "matchRadiusNm": 130
+          }
+        },
+        "ring": {
+          "medianRadiusNm": 30.192720476251868,
+          "p10RadiusNm": 27.328684963762576,
+          "p90RadiusNm": 33.175558715978774,
+          "fractionInsideRadius15Nm": 0
+        }
+      },
+      "qualityChecks": {
+        "rmsPerAxisBelow4Nm": true,
+        "noUnmatchedFits": true,
+        "recallAtLeast50Percent": true,
+        "geometryWithin10NmAtLeast99Percent": true
+      }
+    },
+    {
+      "kind": "actin",
+      "regime": "preset-default",
+      "labels": 500,
+      "seed": 987654321,
+      "truthSha256": "01853f866c0cae53fe8079e78a58a524d24ae485e052af0cffbce540e5ddad05",
+      "historical": {
+        "cameraSha256": "346d09c4383ed6dc2b164b9cd3bcf7c17828b1f6ee4d7d90dc8dabe641a7b2ff",
+        "frames": 2000,
+        "labelsEverOn": 285,
+        "fractionLabelsEverOn": 0.57,
+        "meanActive": 0.5275,
+        "acceptedFits": 954,
+        "rmsPerAxisErrorNm": 21.804614892472927,
+        "matchedCount": 881,
+        "activeEmitterFrames": 1055,
+        "missedCount": 174,
+        "falsePositiveCount": 73,
+        "detectionRecall": 0.8350710900473933,
+        "falsePositiveRate": 0.07651991614255765,
+        "matchRadiusNm": 130,
+        "medianFittedPhotons": 5042.389912200073,
+        "p90FittedPhotons": 9495.502588965088,
+        "medianThompsonNm": 1.9987744872490185,
+        "shape": {
+          "medianDistanceNm": 1.7363185303993305,
+          "p90DistanceNm": 33.284429886149155,
+          "rmsDistanceNm": 25.858896114481162,
+          "fractionWithin10Nm": 0.8668763102725366
+        },
+        "framing": {
+          "view": {
+            "x0": 4120,
+            "y0": 4120,
+            "sizeNm": 2000
+          },
+          "labelsInView": 500,
+          "fitsInView": 954
+        },
+        "groups": {
+          "empty": {
+            "frames": 1195,
+            "rmsPerAxisErrorNm": null,
+            "matchedCount": 0,
+            "activeEmitterFrames": 0,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": null,
+            "falsePositiveRate": null,
+            "matchRadiusNm": 130
+          },
+          "single": {
+            "frames": 601,
+            "rmsPerAxisErrorNm": 2.1667509829118328,
+            "matchedCount": 601,
+            "activeEmitterFrames": 601,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": 1,
+            "falsePositiveRate": 0,
+            "matchRadiusNm": 130
+          },
+          "multiple": {
+            "frames": 204,
+            "rmsPerAxisErrorNm": 38.54691684278037,
+            "matchedCount": 280,
+            "activeEmitterFrames": 454,
+            "missedCount": 174,
+            "falsePositiveCount": 73,
+            "detectionRecall": 0.6167400881057269,
+            "falsePositiveRate": 0.20679886685552407,
+            "matchRadiusNm": 130
+          }
+        }
+      },
+      "current": {
+        "cameraSha256": "346d09c4383ed6dc2b164b9cd3bcf7c17828b1f6ee4d7d90dc8dabe641a7b2ff",
+        "frames": 2000,
+        "labelsEverOn": 285,
+        "fractionLabelsEverOn": 0.57,
+        "meanActive": 0.5275,
+        "acceptedFits": 776,
+        "rmsPerAxisErrorNm": 2.2534671462209177,
+        "matchedCount": 776,
+        "activeEmitterFrames": 1055,
+        "missedCount": 279,
+        "falsePositiveCount": 0,
+        "detectionRecall": 0.7355450236966825,
+        "falsePositiveRate": 0,
+        "matchRadiusNm": 130,
+        "medianFittedPhotons": 5006.024638375573,
+        "p90FittedPhotons": 5104.275028771001,
+        "medianThompsonNm": 2.0064543571991393,
+        "shape": {
+          "medianDistanceNm": 1.4953166912491724,
+          "p90DistanceNm": 3.92787033775312,
+          "rmsDistanceNm": 2.3012293624163878,
+          "fractionWithin10Nm": 1
+        },
+        "framing": {
+          "view": {
+            "x0": 3920,
+            "y0": 3920,
+            "sizeNm": 2400
+          },
+          "labelsInView": 500,
+          "fitsInView": 776
+        },
+        "groups": {
+          "empty": {
+            "frames": 1195,
+            "rmsPerAxisErrorNm": null,
+            "matchedCount": 0,
+            "activeEmitterFrames": 0,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": null,
+            "falsePositiveRate": null,
+            "matchRadiusNm": 130
+          },
+          "single": {
+            "frames": 601,
+            "rmsPerAxisErrorNm": 2.203828134121791,
+            "matchedCount": 601,
+            "activeEmitterFrames": 601,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": 1,
+            "falsePositiveRate": 0,
+            "matchRadiusNm": 130
+          },
+          "multiple": {
+            "frames": 204,
+            "rmsPerAxisErrorNm": 2.4161890627142752,
+            "matchedCount": 175,
+            "activeEmitterFrames": 454,
+            "missedCount": 279,
+            "falsePositiveCount": 0,
+            "detectionRecall": 0.3854625550660793,
+            "falsePositiveRate": 0,
+            "matchRadiusNm": 130
+          }
+        }
+      },
+      "qualityChecks": {
+        "rmsPerAxisBelow4Nm": true,
+        "noUnmatchedFits": true,
+        "recallAtLeast50Percent": true,
+        "geometryWithin10NmAtLeast99Percent": true
+      }
+    },
+    {
+      "kind": "image",
+      "regime": "preset-default",
+      "labels": 2000,
+      "seed": 987654321,
+      "truthSha256": "6c9f55828336c0c1f74f776b2f14538b9dde644b98f903f8c0d70fc2f8881b47",
+      "historical": {
+        "cameraSha256": "0d73cf4a3e220551c8c340df65e1bc4e2526baa56b105587519d87bfb1811ae6",
+        "frames": 2000,
+        "labelsEverOn": 1123,
+        "fractionLabelsEverOn": 0.5615,
+        "meanActive": 2.0115,
+        "acceptedFits": 3467,
+        "rmsPerAxisErrorNm": 19.823744246364438,
+        "matchedCount": 3025,
+        "activeEmitterFrames": 4023,
+        "missedCount": 998,
+        "falsePositiveCount": 442,
+        "detectionRecall": 0.7519264230673627,
+        "falsePositiveRate": 0.12748774156331122,
+        "matchRadiusNm": 130,
+        "medianFittedPhotons": 5060.724155857489,
+        "p90FittedPhotons": 9988.654731680152,
+        "medianThompsonNm": 1.9949828880900569,
+        "shape": {
+          "medianDistanceNm": 0,
+          "p90DistanceNm": 0.5491389818853349,
+          "rmsDistanceNm": 5.888801699139607,
+          "fractionWithin10Nm": 0.9997115661955581
+        },
+        "framing": {
+          "view": {
+            "x0": 2049.1144412085414,
+            "y0": 2049.3088484385516,
+            "sizeNm": 6141.373948160559
+          },
+          "labelsInView": 2000,
+          "fitsInView": 3467
+        },
+        "groups": {
+          "empty": {
+            "frames": 272,
+            "rmsPerAxisErrorNm": null,
+            "matchedCount": 0,
+            "activeEmitterFrames": 0,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": null,
+            "falsePositiveRate": null,
+            "matchRadiusNm": 130
+          },
+          "single": {
+            "frames": 528,
+            "rmsPerAxisErrorNm": 2.1464472912924975,
+            "matchedCount": 528,
+            "activeEmitterFrames": 528,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": 1,
+            "falsePositiveRate": 0,
+            "matchRadiusNm": 130
+          },
+          "multiple": {
+            "frames": 1200,
+            "rmsPerAxisErrorNm": 21.796877939776316,
+            "matchedCount": 2497,
+            "activeEmitterFrames": 3495,
+            "missedCount": 998,
+            "falsePositiveCount": 442,
+            "detectionRecall": 0.7144492131616595,
+            "falsePositiveRate": 0.15039128955427017,
+            "matchRadiusNm": 130
+          }
+        }
+      },
+      "current": {
+        "cameraSha256": "0d73cf4a3e220551c8c340df65e1bc4e2526baa56b105587519d87bfb1811ae6",
+        "frames": 2000,
+        "labelsEverOn": 1123,
+        "fractionLabelsEverOn": 0.5615,
+        "meanActive": 2.0115,
+        "acceptedFits": 2516,
+        "rmsPerAxisErrorNm": 2.2916299349484572,
+        "matchedCount": 2516,
+        "activeEmitterFrames": 4023,
+        "missedCount": 1507,
+        "falsePositiveCount": 0,
+        "detectionRecall": 0.6254039274173503,
+        "falsePositiveRate": 0,
+        "matchRadiusNm": 130,
+        "medianFittedPhotons": 5001.5699309403335,
+        "p90FittedPhotons": 5099.562794962278,
+        "medianThompsonNm": 2.0073730877026454,
+        "shape": {
+          "medianDistanceNm": 0,
+          "p90DistanceNm": 0.9835275671439376,
+          "rmsDistanceNm": 0.7539573327884658,
+          "fractionWithin10Nm": 1
+        },
+        "framing": {
+          "view": {
+            "x0": 0,
+            "y0": 0,
+            "sizeNm": 10240
+          },
+          "labelsInView": 2000,
+          "fitsInView": 2516
+        },
+        "groups": {
+          "empty": {
+            "frames": 272,
+            "rmsPerAxisErrorNm": null,
+            "matchedCount": 0,
+            "activeEmitterFrames": 0,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": null,
+            "falsePositiveRate": null,
+            "matchRadiusNm": 130
+          },
+          "single": {
+            "frames": 528,
+            "rmsPerAxisErrorNm": 2.1820151986140397,
+            "matchedCount": 527,
+            "activeEmitterFrames": 528,
+            "missedCount": 1,
+            "falsePositiveCount": 0,
+            "detectionRecall": 0.9981060606060606,
+            "falsePositiveRate": 0,
+            "matchRadiusNm": 130
+          },
+          "multiple": {
+            "frames": 1200,
+            "rmsPerAxisErrorNm": 2.3198053413746176,
+            "matchedCount": 1989,
+            "activeEmitterFrames": 3495,
+            "missedCount": 1506,
+            "falsePositiveCount": 0,
+            "detectionRecall": 0.5690987124463519,
+            "falsePositiveRate": 0,
+            "matchRadiusNm": 130
+          }
+        }
+      },
+      "qualityChecks": {
+        "rmsPerAxisBelow4Nm": true,
+        "noUnmatchedFits": true,
+        "recallAtLeast50Percent": true,
+        "geometryWithin10NmAtLeast99Percent": true
+      }
+    },
+    {
+      "kind": "two-lines",
+      "regime": "legacy-density-control",
+      "labels": 10000,
+      "seed": 42,
+      "truthSha256": "fd4735515d879aef730b233020e08dd012f2245cac65c7864700020f77a7702d",
+      "historical": {
+        "cameraSha256": "0e7cbf162ac02faeb37773b2a214501e7d5e26d7d56057fb4d38b31e8be11441",
+        "frames": 2000,
+        "labelsEverOn": 5528,
+        "fractionLabelsEverOn": 0.5528,
+        "meanActive": 10.119,
+        "acceptedFits": 7515,
+        "rmsPerAxisErrorNm": 43.58545700327529,
+        "matchedCount": 5919,
+        "activeEmitterFrames": 20238,
+        "missedCount": 14319,
+        "falsePositiveCount": 1596,
+        "detectionRecall": 0.29246961162170176,
+        "falsePositiveRate": 0.212375249500998,
+        "matchRadiusNm": 130,
+        "medianFittedPhotons": 16390.586252122375,
+        "p90FittedPhotons": 29202.607220995353,
+        "medianThompsonNm": 1.0872488587976037,
+        "shape": {
+          "medianDistanceNm": 14.814949135210554,
+          "p90DistanceNm": 23.46245195149004,
+          "rmsDistanceNm": 23.103618585944783,
+          "fractionWithin10Nm": 0.3568862275449102
+        },
+        "framing": {
+          "view": {
+            "x0": 4620,
+            "y0": 4620,
+            "sizeNm": 1000
+          },
+          "labelsInView": 3332,
+          "fitsInView": 2321
+        },
+        "groups": {
+          "empty": {
+            "frames": 0,
+            "rmsPerAxisErrorNm": null,
+            "matchedCount": 0,
+            "activeEmitterFrames": 0,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": null,
+            "falsePositiveRate": null,
+            "matchRadiusNm": 130
+          },
+          "single": {
+            "frames": 0,
+            "rmsPerAxisErrorNm": null,
+            "matchedCount": 0,
+            "activeEmitterFrames": 0,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": null,
+            "falsePositiveRate": null,
+            "matchRadiusNm": 130
+          },
+          "multiple": {
+            "frames": 2000,
+            "rmsPerAxisErrorNm": 43.58545700327529,
+            "matchedCount": 5919,
+            "activeEmitterFrames": 20238,
+            "missedCount": 14319,
+            "falsePositiveCount": 1596,
+            "detectionRecall": 0.29246961162170176,
+            "falsePositiveRate": 0.212375249500998,
+            "matchRadiusNm": 130
+          }
+        }
+      },
+      "current": {
+        "cameraSha256": "0e7cbf162ac02faeb37773b2a214501e7d5e26d7d56057fb4d38b31e8be11441",
+        "frames": 2000,
+        "labelsEverOn": 5528,
+        "fractionLabelsEverOn": 0.5528,
+        "meanActive": 10.119,
+        "acceptedFits": 500,
+        "rmsPerAxisErrorNm": 2.469962406461469,
+        "matchedCount": 500,
+        "activeEmitterFrames": 20238,
+        "missedCount": 19738,
+        "falsePositiveCount": 0,
+        "detectionRecall": 0.024705998616464078,
+        "falsePositiveRate": 0,
+        "matchRadiusNm": 130,
+        "medianFittedPhotons": 5018.536454272621,
+        "p90FittedPhotons": 5122.744050600179,
+        "medianThompsonNm": 2.0037925805811234,
+        "shape": {
+          "medianDistanceNm": 1.4570283115454004,
+          "p90DistanceNm": 3.476099707309004,
+          "rmsDistanceNm": 2.176911432666102,
+          "fractionWithin10Nm": 1
+        },
+        "framing": {
+          "view": {
+            "x0": 3320,
+            "y0": 3320,
+            "sizeNm": 3600
+          },
+          "labelsInView": 10000,
+          "fitsInView": 500
+        },
+        "groups": {
+          "empty": {
+            "frames": 0,
+            "rmsPerAxisErrorNm": null,
+            "matchedCount": 0,
+            "activeEmitterFrames": 0,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": null,
+            "falsePositiveRate": null,
+            "matchRadiusNm": 130
+          },
+          "single": {
+            "frames": 0,
+            "rmsPerAxisErrorNm": null,
+            "matchedCount": 0,
+            "activeEmitterFrames": 0,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": null,
+            "falsePositiveRate": null,
+            "matchRadiusNm": 130
+          },
+          "multiple": {
+            "frames": 2000,
+            "rmsPerAxisErrorNm": 2.469962406461469,
+            "matchedCount": 500,
+            "activeEmitterFrames": 20238,
+            "missedCount": 19738,
+            "falsePositiveCount": 0,
+            "detectionRecall": 0.024705998616464078,
+            "falsePositiveRate": 0,
+            "matchRadiusNm": 130
+          }
+        }
+      }
+    },
+    {
+      "kind": "ring",
+      "regime": "legacy-density-control",
+      "labels": 10000,
+      "seed": 42,
+      "truthSha256": "43eef7c30711d1aad400525e35adeb6dbe6d99eb4a347739aa354ab908410f2c",
+      "historical": {
+        "cameraSha256": "7f179562f087c9b22ac32e3dc0aaaff9e505583bbbf46c1ae08bdcc1780d47e7",
+        "frames": 2000,
+        "labelsEverOn": 5413,
+        "fractionLabelsEverOn": 0.5413,
+        "meanActive": 9.798,
+        "acceptedFits": 2001,
+        "rmsPerAxisErrorNm": 15.502883478734944,
+        "matchedCount": 2000,
+        "activeEmitterFrames": 19596,
+        "missedCount": 17596,
+        "falsePositiveCount": 1,
+        "detectionRecall": 0.10206164523372117,
+        "falsePositiveRate": 0.0004997501249375312,
+        "matchRadiusNm": 130,
+        "medianFittedPhotons": 49769.174668740576,
+        "p90FittedPhotons": 70020.97707857999,
+        "medianThompsonNm": 0.620238823820784,
+        "shape": {
+          "medianDistanceNm": 21.548184299086568,
+          "p90DistanceNm": 26.58914504883097,
+          "rmsDistanceNm": 22.8365115500059,
+          "fractionWithin10Nm": 0.022488755622188907
+        },
+        "framing": {
+          "view": {
+            "x0": 4870,
+            "y0": 4870,
+            "sizeNm": 500
+          },
+          "labelsInView": 10000,
+          "fitsInView": 2000
+        },
+        "groups": {
+          "empty": {
+            "frames": 0,
+            "rmsPerAxisErrorNm": null,
+            "matchedCount": 0,
+            "activeEmitterFrames": 0,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": null,
+            "falsePositiveRate": null,
+            "matchRadiusNm": 130
+          },
+          "single": {
+            "frames": 0,
+            "rmsPerAxisErrorNm": null,
+            "matchedCount": 0,
+            "activeEmitterFrames": 0,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": null,
+            "falsePositiveRate": null,
+            "matchRadiusNm": 130
+          },
+          "multiple": {
+            "frames": 2000,
+            "rmsPerAxisErrorNm": 15.502883478734944,
+            "matchedCount": 2000,
+            "activeEmitterFrames": 19596,
+            "missedCount": 17596,
+            "falsePositiveCount": 1,
+            "detectionRecall": 0.10206164523372117,
+            "falsePositiveRate": 0.0004997501249375312,
+            "matchRadiusNm": 130
+          }
+        },
+        "ring": {
+          "medianRadiusNm": 8.45891431405508,
+          "p10RadiusNm": 3.4230314706743155,
+          "p90RadiusNm": 15.438979870096059,
+          "fractionInsideRadius15Nm": 0.8920539730134932
+        }
+      },
+      "current": {
+        "cameraSha256": "7f179562f087c9b22ac32e3dc0aaaff9e505583bbbf46c1ae08bdcc1780d47e7",
+        "frames": 2000,
+        "labelsEverOn": 5413,
+        "fractionLabelsEverOn": 0.5413,
+        "meanActive": 9.798,
+        "acceptedFits": 0,
+        "rmsPerAxisErrorNm": null,
+        "matchedCount": 0,
+        "activeEmitterFrames": 19596,
+        "missedCount": 19596,
+        "falsePositiveCount": 0,
+        "detectionRecall": 0,
+        "falsePositiveRate": null,
+        "matchRadiusNm": 130,
+        "medianFittedPhotons": null,
+        "p90FittedPhotons": null,
+        "medianThompsonNm": null,
+        "shape": {
+          "medianDistanceNm": null,
+          "p90DistanceNm": null,
+          "rmsDistanceNm": null,
+          "fractionWithin10Nm": null
+        },
+        "framing": {
+          "view": {
+            "x0": 4995,
+            "y0": 4995,
+            "sizeNm": 250
+          },
+          "labelsInView": 10000,
+          "fitsInView": 0
+        },
+        "groups": {
+          "empty": {
+            "frames": 0,
+            "rmsPerAxisErrorNm": null,
+            "matchedCount": 0,
+            "activeEmitterFrames": 0,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": null,
+            "falsePositiveRate": null,
+            "matchRadiusNm": 130
+          },
+          "single": {
+            "frames": 0,
+            "rmsPerAxisErrorNm": null,
+            "matchedCount": 0,
+            "activeEmitterFrames": 0,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": null,
+            "falsePositiveRate": null,
+            "matchRadiusNm": 130
+          },
+          "multiple": {
+            "frames": 2000,
+            "rmsPerAxisErrorNm": null,
+            "matchedCount": 0,
+            "activeEmitterFrames": 19596,
+            "missedCount": 19596,
+            "falsePositiveCount": 0,
+            "detectionRecall": 0,
+            "falsePositiveRate": null,
+            "matchRadiusNm": 130
+          }
+        },
+        "ring": {
+          "medianRadiusNm": null,
+          "p10RadiusNm": null,
+          "p90RadiusNm": null,
+          "fractionInsideRadius15Nm": null
+        }
+      }
+    },
+    {
+      "kind": "actin",
+      "regime": "legacy-density-control",
+      "labels": 10000,
+      "seed": 42,
+      "truthSha256": "03865e2136df7c1bc79bfd228a7f58396db11ba85adc79b516f11480aaf0a5d5",
+      "historical": {
+        "cameraSha256": "7234d7928bde7b9e0dd0f251b9366c997bfc67f1a949ac8aa8b141a2e9d56d8f",
+        "frames": 2000,
+        "labelsEverOn": 5540,
+        "fractionLabelsEverOn": 0.554,
+        "meanActive": 9.909,
+        "acceptedFits": 5511,
+        "rmsPerAxisErrorNm": 57.30735388916403,
+        "matchedCount": 3879,
+        "activeEmitterFrames": 19818,
+        "missedCount": 15939,
+        "falsePositiveCount": 1632,
+        "detectionRecall": 0.19573115349682108,
+        "falsePositiveRate": 0.2961350027218291,
+        "matchRadiusNm": 130,
+        "medianFittedPhotons": 23743.56772008293,
+        "p90FittedPhotons": 39689.883825301185,
+        "medianThompsonNm": 0.9008707201120539,
+        "shape": {
+          "medianDistanceNm": 46.89030029424066,
+          "p90DistanceNm": 86.45215267614094,
+          "rmsDistanceNm": 54.788622498143894,
+          "fractionWithin10Nm": 0.13881328252585737
+        },
+        "framing": {
+          "view": {
+            "x0": 4120,
+            "y0": 4120,
+            "sizeNm": 2000
+          },
+          "labelsInView": 10000,
+          "fitsInView": 5511
+        },
+        "groups": {
+          "empty": {
+            "frames": 0,
+            "rmsPerAxisErrorNm": null,
+            "matchedCount": 0,
+            "activeEmitterFrames": 0,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": null,
+            "falsePositiveRate": null,
+            "matchRadiusNm": 130
+          },
+          "single": {
+            "frames": 2,
+            "rmsPerAxisErrorNm": 2.0670358901914145,
+            "matchedCount": 2,
+            "activeEmitterFrames": 2,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": 1,
+            "falsePositiveRate": 0,
+            "matchRadiusNm": 130
+          },
+          "multiple": {
+            "frames": 1998,
+            "rmsPerAxisErrorNm": 57.32211412331259,
+            "matchedCount": 3877,
+            "activeEmitterFrames": 19816,
+            "missedCount": 15939,
+            "falsePositiveCount": 1632,
+            "detectionRecall": 0.19564997981429147,
+            "falsePositiveRate": 0.29624251225267745,
+            "matchRadiusNm": 130
+          }
+        }
+      },
+      "current": {
+        "cameraSha256": "7234d7928bde7b9e0dd0f251b9366c997bfc67f1a949ac8aa8b141a2e9d56d8f",
+        "frames": 2000,
+        "labelsEverOn": 5540,
+        "fractionLabelsEverOn": 0.554,
+        "meanActive": 9.909,
+        "acceptedFits": 143,
+        "rmsPerAxisErrorNm": 2.5008160542366404,
+        "matchedCount": 143,
+        "activeEmitterFrames": 19818,
+        "missedCount": 19675,
+        "falsePositiveCount": 0,
+        "detectionRecall": 0.007215662529014027,
+        "falsePositiveRate": 0,
+        "matchRadiusNm": 130,
+        "medianFittedPhotons": 5020.763724423466,
+        "p90FittedPhotons": 5117.4603469795065,
+        "medianThompsonNm": 2.003344695809938,
+        "shape": {
+          "medianDistanceNm": 1.6027368701979867,
+          "p90DistanceNm": 3.840113858834229,
+          "rmsDistanceNm": 2.7873522630804675,
+          "fractionWithin10Nm": 0.9790209790209791
+        },
+        "framing": {
+          "view": {
+            "x0": 3920,
+            "y0": 3920,
+            "sizeNm": 2400
+          },
+          "labelsInView": 10000,
+          "fitsInView": 143
+        },
+        "groups": {
+          "empty": {
+            "frames": 0,
+            "rmsPerAxisErrorNm": null,
+            "matchedCount": 0,
+            "activeEmitterFrames": 0,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": null,
+            "falsePositiveRate": null,
+            "matchRadiusNm": 130
+          },
+          "single": {
+            "frames": 2,
+            "rmsPerAxisErrorNm": 2.151427695007259,
+            "matchedCount": 2,
+            "activeEmitterFrames": 2,
+            "missedCount": 0,
+            "falsePositiveCount": 0,
+            "detectionRecall": 1,
+            "falsePositiveRate": 0,
+            "matchRadiusNm": 130
+          },
+          "multiple": {
+            "frames": 1998,
+            "rmsPerAxisErrorNm": 2.5054214856908863,
+            "matchedCount": 141,
+            "activeEmitterFrames": 19816,
+            "missedCount": 19675,
+            "falsePositiveCount": 0,
+            "detectionRecall": 0.00711546225272507,
+            "falsePositiveRate": 0,
+            "matchRadiusNm": 130
+          }
+        }
+      }
+    }
+  ],
+  "checks": {
+    "identicalCameraPixels": true,
+    "allDefaultLabelsInView": true,
+    "currentImageLabelsInsideVisibleSupport": true,
+    "defaultReconstructionQuality": true,
+    "currentSourcesStable": true
+  }
+}

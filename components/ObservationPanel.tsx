@@ -11,10 +11,12 @@ import { computeDriftAtFrame } from '@/lib/simulator/drift';
 import { locsThroughFrame } from '@/lib/timeline';
 import { downloadBlob } from '@/lib/export';
 import { ConventionalView } from './ConventionalView';
+import { SpecimenView } from './SpecimenView';
 import { FieldScale } from './FieldScale';
 import type { LiveUpdate } from '@/lib/simulator/runSimulation';
 import type {
   GroundTruth,
+  GroundTruthInput,
   SimulationParams,
   SimulationResult,
   ViewBox,
@@ -22,6 +24,8 @@ import type {
 
 type Props = {
   truth: GroundTruth | null;
+  specimen: GroundTruthInput | null;
+  seed: number;
   view: ViewBox;
   params: SimulationParams;
   result: SimulationResult | null;
@@ -36,7 +40,9 @@ type Props = {
 /** One timeline drives the reconstruction, camera frame, and frame counts. */
 export function ObservationPanel({
   truth,
-  view,
+  specimen,
+  seed,
+  view: fullView,
   params,
   result,
   live,
@@ -48,8 +54,16 @@ export function ObservationPanel({
 }: Props) {
   const cloud = useRef<HTMLCanvasElement>(null);
   const camera = useRef<HTMLCanvasElement>(null);
-  const [cameraView, setCameraView] = useState<'frame' | 'mean'>('frame');
-  const [showTruth, setShowTruth] = useState(false);
+  const [requestedCameraView, setCameraView] = useState<'frame' | 'mean' | null>(null);
+  // Show blinking during acquisition and the collected image when it finishes.
+  // An explicit user choice remains in force for this acquisition.
+  const cameraView = requestedCameraView ?? (running ? 'frame' : 'mean');
+  const [zoom, setZoom] = useState(1);
+  const view = useMemo(() => ({
+    x0: fullView.x0 + fullView.sizeNm * (1 - 1 / zoom) / 2,
+    y0: fullView.y0 + fullView.sizeNm * (1 - 1 / zoom) / 2,
+    sizeNm: fullView.sizeNm / zoom,
+  }), [fullView, zoom]);
   const [scrubFrame, setScrubFrame] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
@@ -103,9 +117,8 @@ export function ObservationPanel({
     if (cloud.current)
       drawLocalizationCloud(
         cloud.current,
-        showTruth ? (truth?.emitters ?? []) : positions,
+        positions,
         view,
-        { truth: showTruth },
       );
     const options = { view, pixelSizeNm: params.pixelSizeNm };
     if (camera.current)
@@ -117,8 +130,6 @@ export function ObservationPanel({
         options,
       );
   }, [
-    showTruth,
-    truth,
     positions,
     view,
     selectedCamera,
@@ -164,9 +175,9 @@ export function ObservationPanel({
     const size = 1024;
     drawLocalizationCloud(
       field,
-      showTruth ? (truth?.emitters ?? []) : positions,
+      positions,
       view,
-      { truth: showTruth, width: size, height: size },
+      { width: size, height: size },
     );
     output.width = size;
     output.height = size + 110;
@@ -181,13 +192,13 @@ export function ObservationPanel({
     ctx.font = '18px sans-serif';
     ctx.fillText(bar.label, 24, size - 16);
     ctx.fillText(
-      `${showTruth ? 'Ground truth' : 'STORM reconstruction'} · frame ${shownFrame} / ${framesCompleted} · ${showTruth ? (truth?.emitters.length ?? 0) : nShown} positions`,
+      `STORM reconstruction · frame ${shownFrame} / ${framesCompleted} · ${nShown} positions`,
       24,
       size + 30,
     );
     ctx.font = '15px sans-serif';
     ctx.fillText(
-      `View ${view.sizeNm} nm · fixed display markers · known drift correction ${showTruth ? 'not applicable' : correctDrift ? 'on' : 'off'}`,
+      `View ${view.sizeNm} nm · seed ${seed} · known drift correction ${correctDrift ? 'on' : 'off'}`,
       24,
       size + 58,
     );
@@ -200,7 +211,7 @@ export function ObservationPanel({
       if (blob)
         downloadBlob(
           blob,
-          showTruth ? 'storm-ground-truth.png' : 'storm-reconstruction.png',
+          'storm-reconstruction.png',
         );
     }, 'image/png');
   };
@@ -208,24 +219,30 @@ export function ObservationPanel({
 
   return (
     <>
+      <div className="comparison-toolbar">
+        <span>Each view shows the same area</span>
+        <label>
+          View
+          <select value={zoom} onChange={(event) => setZoom(Number(event.target.value))}>
+            <option value={1}>Whole object</option>
+            <option value={2}>2× center crop</option>
+            <option value={4}>4× center crop</option>
+          </select>
+        </label>
+      </div>
       <div className="image-grid">
+        <SpecimenView specimen={specimen} truth={truth} view={view} />
         <figure className="image-panel reconstruction-panel">
           <figcaption>
-            <h3>{showTruth ? 'Ground truth' : 'STORM reconstruction'}</h3>
-            <span>
-              {showTruth
-                ? `${truth?.emitters.length.toLocaleString() ?? 0} emitters`
-                : `${nShown.toLocaleString()} localizations`}
-            </span>
+            <h3>STORM reconstruction</h3>
+            <span>{nShown.toLocaleString()} localizations</span>
           </figcaption>
           <div className="microscopy-field main-field">
             <canvas
               ref={cloud}
               role="img"
               aria-label={
-                showTruth
-                  ? 'Synthetic emitter positions in the sample'
-                  : `STORM reconstruction through frame ${shownFrame}, with known drift correction ${correctDrift ? 'on' : 'off'}`
+                `STORM reconstruction through frame ${shownFrame}, with known drift correction ${correctDrift ? 'on' : 'off'}`
               }
             />
             <div className="field-top">
@@ -233,53 +250,35 @@ export function ObservationPanel({
                 className="field-icon"
                 aria-label="Save image as PNG"
                 onClick={saveImage}
-                disabled={running || (showTruth ? !truth : !nShown)}
+                disabled={running || !nShown}
               >
                 PNG <Download />
               </button>
             </div>
             <FieldScale view={view} />
-            {!showTruth && !framesCompleted && (
+            {!framesCompleted && (
               <div className="empty-field">
                 {running ? 'Acquiring camera frames…' : 'Run an experiment'}
               </div>
             )}
-            {!showTruth && framesCompleted > 0 && nShown === 0 && (
+            {framesCompleted > 0 && nShown === 0 && (
               <div className="empty-field">
-                No accepted localizations in these frames
+                {shownFrame === 0 ? 'Before the first frame' : 'No accepted fits in these frames'}
               </div>
             )}
           </div>
           <div className="view-options">
-            <div
-              className="segmented-control"
-              role="group"
-              aria-label="Main image"
-            >
-              <button
-                aria-pressed={!showTruth}
-                onClick={() => setShowTruth(false)}
-              >
-                Reconstruction
-              </button>
-              <button
-                aria-pressed={showTruth}
-                onClick={() => setShowTruth(true)}
-              >
-                Ground truth
-              </button>
-            </div>
             <label className="switch-label">
               <input
                 type="checkbox"
                 checked={correctDrift}
                 onChange={(event) => onDriftChange(event.target.checked)}
-                disabled={showTruth}
               />
               Correct known drift
             </label>
           </div>
         </figure>
+      </div>
         <div className="reference-views">
           <ConventionalView
             truth={truth}
@@ -336,10 +335,10 @@ export function ObservationPanel({
                   Mean
                 </button>
               </div>
+              <span className="image-note">{params.pixelSizeNm} nm camera pixels</span>
             </div>
           </figure>
         </div>
-      </div>
       <div className="playback-panel">
         <button
           className="play-button"
@@ -423,7 +422,19 @@ export function ObservationPanel({
             {shownFrame ? `In frame ${shownFrame}` : 'In the selected frame'}
           </small>
         </div>
+        <div>
+          <dt>Detection recall</dt>
+          <dd>{result?.metrics.detectionRecall == null ? '—' : `${(100 * result.metrics.detectionRecall).toFixed(0)}%`}</dd>
+          <small>Active emitter-frames matched</small>
+        </div>
       </dl>
+      {result && result.rawLocalizations.length === 0 && (
+        <p className="mb-5 text-xs leading-relaxed text-muted-foreground" role="status">
+          {result.metrics.activeEmitterFrames === 0
+            ? 'No active molecules were recorded in the field. Try more frames or higher activation.'
+            : 'No spots passed the single-molecule checks. Try fewer active molecules or a higher photon yield.'}
+        </p>
+      )}
     </>
   );
 }

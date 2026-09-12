@@ -1,4 +1,5 @@
-import type { ViewBox } from '@/lib/simulator/types';
+import type { GroundTruthInput, ViewBox } from '@/lib/simulator/types';
+import { imageBounds } from '@/lib/simulator/groundTruth';
 
 /** Rendering port of python/storm_slides/web/renderer.js; no simulation math. */
 const FIELD = '#0b1020';
@@ -70,6 +71,7 @@ type CameraBuffer = {
 type CanvasResources = {
   sprites: Partial<Record<keyof typeof COLORS, HTMLCanvasElement>>;
   camera?: CameraBuffer;
+  source?: { canvas: HTMLCanvasElement; pixels: ImageData };
 };
 
 // Each target owns its resources. Drawing a second panel or PNG never mutates
@@ -83,6 +85,69 @@ function canvasResources(canvas: HTMLCanvasElement): CanvasResources {
     resources.set(canvas, value);
   }
   return value;
+}
+
+/** Known specimen geometry or uploaded source; never used to locate camera spots. */
+export function drawActualObject(
+  canvas: HTMLCanvasElement,
+  specimen: GroundTruthInput | null,
+  field: { width: number; height: number },
+  view: ViewBox,
+  options: LabCanvasOptions = {},
+): void {
+  validateView(view);
+  const viewport = prepare(canvas, options);
+  if (!viewport || !specimen) return;
+  const { ctx, side, left, top } = viewport;
+  const scale = side / view.sizeNm;
+  const x = (nm: number) => left + (nm - view.x0) * scale;
+  const y = (nm: number) => top + (nm - view.y0) * scale;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(left, top, side, side);
+  ctx.clip();
+  if (specimen.kind === 'image') {
+    const cached = canvasResources(canvas);
+    if (cached.source?.pixels !== specimen.imageData) {
+      const source = canvas.ownerDocument.createElement('canvas');
+      source.width = specimen.imageData.width;
+      source.height = specimen.imageData.height;
+      const context = source.getContext('2d');
+      if (!context) { ctx.restore(); return; }
+      context.putImageData(specimen.imageData, 0, 0);
+      cached.source = { canvas: source, pixels: specimen.imageData };
+    }
+    const bounds = imageBounds(specimen.sourceSize ?? specimen.imageData, field);
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(cached.source.canvas, x(bounds.x0), y(bounds.y0), bounds.width * scale, bounds.height * scale);
+  } else {
+    const cx = field.width / 2;
+    const cy = field.height / 2;
+    ctx.strokeStyle = '#efbe71';
+    // Object paths are geometrically thin; stroke width only makes them visible.
+    ctx.lineWidth = 1.6;
+    ctx.lineCap = 'round';
+    ctx.shadowColor = '#efbe7170';
+    ctx.shadowBlur = 4;
+    ctx.beginPath();
+    if (specimen.kind === 'ring') {
+      ctx.arc(x(cx), y(cy), specimen.diameterNm * scale / 2, 0, 2 * Math.PI);
+    } else if (specimen.kind === 'two-lines') {
+      for (const sign of [-1, 1]) {
+        const lineY = cy + sign * specimen.separationNm / 2;
+        ctx.moveTo(x(cx - specimen.lengthNm / 2), y(lineY));
+        ctx.lineTo(x(cx + specimen.lengthNm / 2), y(lineY));
+      }
+    } else {
+      for (let rung = 0; rung < specimen.nRungs; rung++) {
+        const rungX = cx + (rung - (specimen.nRungs - 1) / 2) * specimen.periodNm;
+        ctx.moveTo(x(rungX), y(cy - specimen.rungLengthNm / 2));
+        ctx.lineTo(x(rungX), y(cy + specimen.rungLengthNm / 2));
+      }
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function prepare(canvas: HTMLCanvasElement, options: LabCanvasOptions) {

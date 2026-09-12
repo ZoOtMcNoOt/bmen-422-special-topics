@@ -1,25 +1,29 @@
 import type { RigorMode, SimulationParams } from './simulator/types';
 import {
-  DEFAULT_DENSITY_PER_UM2,
   DEFAULT_PRESET,
+  PRESETS, MIN_EMITTERS, MAX_EMITTERS, EMITTER_STEP,
   isPresetKind,
   type PresetKind,
 } from './presets';
+import { DEFAULT_SEED } from './simulator/random';
 
 export type ShareableState = {
   params: SimulationParams;
   preset: PresetKind;
-  densityPerUm2: number;
+  moleculeCount: number;
+  seed: number;
 };
 
 export function encodeState({
   params,
   preset,
-  densityPerUm2,
+  moleculeCount,
+  seed,
 }: ShareableState): string {
   const q = new URLSearchParams();
   q.set('preset', preset);
-  q.set('density', String(densityPerUm2));
+  q.set('emitters', String(moleculeCount));
+  q.set('seed', String(seed));
   q.set('N', String(params.photonsPerCycle));
   q.set('b', String(params.backgroundPerPixel));
   q.set('frames', String(params.nFrames));
@@ -37,7 +41,10 @@ export function decodeState(
 ): ShareableState {
   const q = new URLSearchParams(query);
   const rigor = q.get('rigor');
-  const preset = q.get('preset');
+  const requestedPreset = q.get('preset');
+  const preset = isPresetKind(requestedPreset) ? requestedPreset : DEFAULT_PRESET;
+  const defaultCount = PRESETS[preset].defaultEmitters;
+  const count = bounded(q.get('emitters'), defaultCount, MIN_EMITTERS, MAX_EMITTERS, true);
   return {
     params: {
       ...defaults,
@@ -67,8 +74,9 @@ export function decodeState(
         : defaults.correctDrift,
       rigorMode: isRigorMode(rigor) ? rigor : defaults.rigorMode,
     },
-    preset: isPresetKind(preset) ? preset : DEFAULT_PRESET,
-    densityPerUm2: bounded(q.get('density'), DEFAULT_DENSITY_PER_UM2, 25, 500),
+    preset,
+    moleculeCount: count % EMITTER_STEP === 0 ? count : defaultCount,
+    seed: bounded(q.get('seed'), DEFAULT_SEED, 0, 2 ** 32 - 1, true),
   };
 }
 
