@@ -80,12 +80,28 @@ describe('original lab display geometry and palette', () => {
     expect(target.created).toHaveLength(1);
   });
 
-  it('caps DPR while letterboxing a square physical field in a wide container', () => {
+  it('renders at the full screen density while letterboxing a square field in a wide container', () => {
     expect(labViewport(480, 300, 3)).toEqual({
-      width: 480, height: 300, dpr: 2, pixelWidth: 960, pixelHeight: 600,
+      width: 480, height: 300, scaleX: 3, scaleY: 3, pixelWidth: 1440, pixelHeight: 900,
       side: 300, left: 90, top: 0,
     });
     expect(labViewport(200, 400)).toMatchObject({ side: 200, left: 0, top: 100 });
+    expect(labViewport(100, 100, 6)).toMatchObject({ scaleX: 4, pixelWidth: 400 });
+  });
+
+  it('derives the drawing scale from the whole-pixel backing size so fractional layouts never stretch', () => {
+    const viewport = labViewport(430.39, 224.16, 1.25);
+    expect(viewport).toMatchObject({ pixelWidth: 538, pixelHeight: 280 });
+    expect(viewport.scaleX * 430.39).toBeCloseTo(538, 10);
+    expect(viewport.scaleY * 224.16).toBeCloseTo(280, 10);
+  });
+
+  it('uses the browser-reported device-pixel size unless the density was capped', () => {
+    expect(labViewport(333.33, 200, 1.5, { width: 499, height: 300 })).toMatchObject({
+      pixelWidth: 499, pixelHeight: 300, scaleY: 1.5,
+    });
+    expect(labViewport(100, 100, 6, { width: 600, height: 600 })).toMatchObject({ pixelWidth: 400 });
+    expect(labViewport(100, 100, 2, { width: 0, height: 200 })).toMatchObject({ pixelWidth: 200 });
   });
 
   it('preserves the exact original purple LUT at representative intensities', () => {
@@ -104,15 +120,24 @@ describe('original lab display geometry and palette', () => {
   it('maps nm view offsets without adding a camera half-pixel shift', () => {
     const target = canvasHarness(400, 200, 3);
     drawLocalizationCloud(target.canvas, [{ x: 4200, y: 5200 }], { x0: 1000, y0: 2000, sizeNm: 6400 });
-    expect(target.canvas.width).toBe(800);
-    expect(target.canvas.height).toBe(400);
-    expect(target.context.setTransform).toHaveBeenCalledWith(2, 0, 0, 2, 0, 0);
+    expect(target.canvas.width).toBe(1200);
+    expect(target.canvas.height).toBe(600);
+    expect(target.context.setTransform).toHaveBeenCalledWith(3, 0, 0, 3, 0, 0);
     expect(target.style.setProperty).toHaveBeenCalledWith('--field-side', '200px');
     expect(target.context.rect).toHaveBeenCalledWith(100, 0, 200, 200);
-    expect(target.context.drawImage).toHaveBeenCalledWith(target.created[0].canvas, 198.5, 98.5, 3, 3);
+    // 200 px field: radius 200/64 × 0.28 = 0.875 px, above the 1.5-device-pixel floor at 3×.
+    const [sprite, ...marker] = target.context.drawImage.mock.calls[0];
+    expect(sprite).toBe(target.created[0].canvas);
+    [199.125, 99.125, 1.75, 1.75].forEach((expected, i) => expect(marker[i]).toBeCloseTo(expected, 12));
     expect(target.context.moveTo).toHaveBeenCalledWith(118.75, 0);
     expect(target.context.moveTo).toHaveBeenCalledWith(100, 37.5);
     expect(target.created[0].gradient.addColorStop).toHaveBeenCalledWith(0, 'rgba(79,222,193,0.9)');
+  });
+
+  it('keeps markers at least 1.5 device pixels wide on small, low-density fields', () => {
+    const target = canvasHarness(100, 100, 1);
+    drawLocalizationCloud(target.canvas, [{ x: 50, y: 50 }], { x0: 0, y0: 0, sizeNm: 100 });
+    expect(target.context.drawImage).toHaveBeenCalledWith(target.created[0].canvas, 48.5, 48.5, 3, 3);
   });
 
   it('uses the original amber sprite for ground truth', () => {
@@ -143,7 +168,7 @@ describe('original lab display geometry and palette', () => {
   it('letterboxes rectangular camera frames and scales the bar to their drawn width', () => {
     const target = canvasHarness(400, 200);
     drawCameraPreview(target.canvas, new Uint8Array(32 * 64), 32, 64);
-    expect(target.context.drawImage).toHaveBeenCalledWith(target.created[0].canvas, 150, 0, 100, 200);
+    expect(target.context.drawImage).toHaveBeenCalledWith(target.created[0].canvas, 0, 0, 32, 64, 150, 0, 100, 200);
     expect(target.style.setProperty).toHaveBeenLastCalledWith('--field-side', '100px');
     expect(target.context.imageSmoothingEnabled).toBe(false);
   });
@@ -160,12 +185,28 @@ describe('original lab display geometry and palette', () => {
     expect(target.context.imageSmoothingEnabled).toBe(false);
   });
 
+  it('puts camera image edges on whole device pixels at fractional densities', () => {
+    const target = canvasHarness(501, 208.75, 1.25);
+    drawCameraPreview(target.canvas, new Uint8Array(64 * 64), 64, 64, {
+      view: { x0: 3320, y0: 3320, sizeNm: 3600 }, pixelSizeNm: 160,
+    });
+    const [, , , , , x, y, w, h] = target.context.drawImage.mock.calls[0];
+    // 501 × 208.75 CSS px at 1.25× has a 626 × 261 backing store.
+    const toDevice = [626 / 501, 261 / 208.75, 626 / 501, 261 / 208.75];
+    [x, y, x + w, y + h].forEach((edge, i) => {
+      const device = edge * toDevice[i];
+      expect(Math.abs(device - Math.round(device))).toBeLessThan(1e-9);
+    });
+    expect(Math.abs(x - 146.125)).toBeLessThanOrEqual(0.4);
+    expect(Math.abs(w - 208.75)).toBeLessThanOrEqual(0.8);
+  });
+
   it('smoothly scales an optical preview, then restores unsmoothed camera sampling', () => {
     const target = canvasHarness(400, 200);
     const pixels = new Uint8Array(48 * 48);
     drawCameraPreview(target.canvas, pixels, 48, 48, { smooth: true });
     expect(target.context.imageSmoothingEnabled).toBe(true);
-    expect(target.context.drawImage).toHaveBeenLastCalledWith(target.created[0].canvas, 100, 0, 200, 200);
+    expect(target.context.drawImage).toHaveBeenLastCalledWith(target.created[0].canvas, 0, 0, 48, 48, 100, 0, 200, 200);
     drawCameraPreview(target.canvas, pixels, 48, 48);
     expect(target.context.imageSmoothingEnabled).toBe(false);
   });

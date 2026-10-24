@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef } from 'react';
 import { conventionalPreview } from '@/lib/rendering/conventionalPreview';
-import { drawCameraPreview } from '@/lib/rendering/labCanvas';
+import { drawCameraPreview, observeCanvasResolution } from '@/lib/rendering/labCanvas';
 import type { GroundTruth, ViewBox } from '@/lib/simulator/types';
 import { FieldScale } from './FieldScale';
 
@@ -23,9 +23,7 @@ export function ConventionalView({ truth, view, psfSigmaNm }: {
       target, preview.pixels, preview.sizePx, preview.sizePx, { smooth: true },
     );
     draw();
-    const observer = new ResizeObserver(draw);
-    observer.observe(target);
-    return () => observer.disconnect();
+    return observeCanvasResolution([target], draw);
   }, [preview]);
 
   return (

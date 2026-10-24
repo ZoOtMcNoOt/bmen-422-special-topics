@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { drawActualObject, drawLocalizationCloud } from '@/lib/rendering/labCanvas';
+import { drawActualObject, drawLocalizationCloud, observeCanvasResolution } from '@/lib/rendering/labCanvas';
 import type { GroundTruth, GroundTruthInput, ViewBox } from '@/lib/simulator/types';
 import { FieldScale } from './FieldScale';
 
@@ -21,9 +21,7 @@ export function SpecimenView({ specimen, truth, view }: {
   }, [showLabels, specimen, truth, view]);
   useEffect(() => {
     draw();
-    const observer = new ResizeObserver(draw);
-    if (canvas.current) observer.observe(canvas.current);
-    return () => observer.disconnect();
+    return observeCanvasResolution([canvas.current], draw);
   }, [draw]);
 
   const description = specimen?.kind === 'two-lines'

@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button';
 import { ControlPanel } from '@/components/ControlPanel';
 import { ObservationPanel } from '@/components/ObservationPanel';
 import { PresetPicker } from '@/components/PresetPicker';
-import { ThompsonPlot } from '@/components/ThompsonPlot';
+import { PrecisionPlot } from '@/components/PrecisionPlot';
 import { DEFAULT_PARAMS, FIELD_SIZE_NM } from '@/lib/simulator/defaults';
 import { generateGroundTruth } from '@/lib/simulator/groundTruth';
 import { runSimulation, type LiveUpdate } from '@/lib/simulator/runSimulation';
@@ -447,7 +447,8 @@ export default function Page() {
           </p>
         )}
         <p className="mb-5 text-xs text-muted-foreground">
-          Point markers have a fixed display size. Camera brightness uses one
+          Point markers are a fixed fraction of the view on every screen, not
+          uncertainty kernels. Camera brightness uses one
           fixed scale for the acquisition. The camera&apos;s all-frame mean averages
           the raw acquired frames and is normalized separately. Both retain
           stage drift.
@@ -466,9 +467,18 @@ export default function Page() {
           acquisition. The same seed, settings, and source image reproduce the
           same run. Shared links do not include uploaded images.
         </p>
-        {notesOpen && <ThompsonPlot params={displayedParams} result={result} />}
+        {notesOpen && <PrecisionPlot params={displayedParams} result={result} />}
         <p className="mt-5 text-xs text-muted-foreground">
-          Precision approximation:{' '}
+          Precision limit:{' '}
+          <a
+            className="underline"
+            href="https://doi.org/10.1038/nmeth.1447"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Mortensen et al. (2010)
+          </a>
+          , for maximum-likelihood fitting. The earlier{' '}
           <a
             className="underline"
             href="https://doi.org/10.1016/S0006-3495(02)75618-X"
@@ -476,8 +486,8 @@ export default function Page() {
             rel="noreferrer"
           >
             Thompson, Larson &amp; Webb (2002)
-          </a>
-          .
+          </a>{' '}
+          approximation is lower by about 7% at the default settings.
         </p>
       </dialog>
     </div>

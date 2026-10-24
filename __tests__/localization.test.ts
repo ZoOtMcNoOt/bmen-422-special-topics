@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { localizeFrame } from '@/lib/simulator/localization';
 import { renderFrame } from '@/lib/simulator/renderFrame';
-import { thompsonSigmaLoc } from '@/lib/simulator/thompson';
+import { mlePrecisionNm } from '@/lib/simulator/precision';
+import { seededRandom } from '@/lib/simulator/random';
 import { CENTER_NM, distance, nearestTo, params } from './fixtures';
 
 describe('localizeFrame', () => {
@@ -42,14 +43,14 @@ describe('localizeFrame', () => {
     expect(distance(nearestTo(locs, b.x, b.y), b.x, b.y)).toBeLessThan(15);
   });
 
-  it('reports a Thompson σ consistent with the photons it counted', () => {
+  it('reports the MLE precision limit for the photons it counted', () => {
     const p = params();
     const [loc] = localizeFrame(renderFrame([{ x: CENTER_NM, y: CENTER_NM }], p, 0), p);
-    expect(loc.sigmaLocNm).toBeCloseTo(thompsonSigmaLoc(p.psfSigmaNm, loc.nPhotons, p.pixelSizeNm, p.backgroundPerPixel), 10);
+    expect(loc.sigmaLocNm).toBeCloseTo(mlePrecisionNm(p.psfSigmaNm, loc.nPhotons, p.pixelSizeNm, p.backgroundPerPixel), 10);
   });
 
   it('the realistic fit is no worse than the centroid on a bright isolated molecule', () => {
-    // At high SNR both estimators are near the Thompson limit (~2 nm), so the
+    // At high SNR both estimators are near the MLE limit (~2 nm), so the
     // mean errors agree to within noise; this guards against the MLE regressing.
     const x = CENTER_NM + 30;
     const y = CENTER_NM + 30;
@@ -59,7 +60,8 @@ describe('localizeFrame', () => {
     for (let t = 0; t < trials; t++) {
       for (const rigorMode of ['pedagogical', 'rigorous'] as const) {
         const p = params({ rigorMode });
-        const locs = localizeFrame(renderFrame([{ x, y }], p, t), p);
+        // Both estimators see the same seeded noise, so the comparison is repeatable.
+        const locs = localizeFrame(renderFrame([{ x, y }], p, t, seededRandom(1000 + t)), p);
         const err = distance(nearestTo(locs, x, y), x, y);
         if (rigorMode === 'pedagogical') centroid += err;
         else mle += err;

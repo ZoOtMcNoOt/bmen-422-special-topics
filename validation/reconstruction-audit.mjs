@@ -150,7 +150,7 @@ function summarize(acquisition, kind, truth, view) {
     acceptedFits: fits.length, ...result.metrics,
     medianFittedPhotons: quantile(fits.map(fit => fit.nPhotons), 0.5),
     p90FittedPhotons: quantile(fits.map(fit => fit.nPhotons), 0.9),
-    medianThompsonNm: result.apparentSigmaLocNm,
+    medianPrecisionLimitNm: result.apparentSigmaLocNm,
     shape: {
       medianDistanceNm: quantile(distances, 0.5), p90DistanceNm: quantile(distances, 0.9),
       rmsDistanceNm: distances.length ? Math.sqrt(distances.reduce((sum, d) => sum + d * d, 0) / distances.length) : null,

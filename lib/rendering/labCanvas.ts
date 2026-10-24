@@ -21,10 +21,15 @@ export type LabCameraOptions = LabCanvasOptions & {
   smooth?: boolean;
 };
 
+/** Exact backing-store size in device pixels, as reported by the browser. */
+export type DevicePixelSize = { width: number; height: number };
+
 export type LabViewport = {
   width: number;
   height: number;
-  dpr: number;
+  /** Device pixels per CSS pixel on each axis, derived from the whole-pixel backing size. */
+  scaleX: number;
+  scaleY: number;
   pixelWidth: number;
   pixelHeight: number;
   side: number;
@@ -32,19 +37,82 @@ export type LabViewport = {
   top: number;
 };
 
-/** Pure sizing geometry, shared by on-screen drawing and detached PNG canvases. */
-export function labViewport(width: number, height: number, dpr = 1): LabViewport {
+/** Covers 3× phones and browser zoom while keeping backing stores bounded. */
+const MAX_DPR = 4;
+
+/**
+ * Pure sizing geometry, shared by on-screen drawing and detached PNG canvases.
+ * The drawing scale comes from the rounded backing size, so fractional CSS sizes
+ * never stretch the image when the browser composites it.
+ */
+export function labViewport(
+  width: number,
+  height: number,
+  dpr = 1,
+  devicePixels?: DevicePixelSize,
+): LabViewport {
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
     throw new RangeError('Canvas dimensions must be finite and positive');
   }
   if (!Number.isFinite(dpr) || dpr <= 0) throw new RangeError('Canvas DPR must be finite and positive');
-  const ratio = Math.min(dpr, 2);
+  const ratio = Math.min(dpr, MAX_DPR);
+  // A browser-reported size is only exact when the density was not capped.
+  const exact = ratio === dpr && devicePixels && Number.isSafeInteger(devicePixels.width) &&
+    Number.isSafeInteger(devicePixels.height) && devicePixels.width > 0 && devicePixels.height > 0
+    ? devicePixels : undefined;
+  const pixelWidth = exact?.width ?? Math.max(1, Math.round(width * ratio));
+  const pixelHeight = exact?.height ?? Math.max(1, Math.round(height * ratio));
   const side = Math.min(width, height);
   return {
-    width, height, dpr: ratio,
-    pixelWidth: Math.max(1, Math.round(width * ratio)),
-    pixelHeight: Math.max(1, Math.round(height * ratio)),
+    width, height,
+    scaleX: pixelWidth / width, scaleY: pixelHeight / height,
+    pixelWidth, pixelHeight,
     side, left: (width - side) / 2, top: (height - side) / 2,
+  };
+}
+
+const devicePixelSizes = new WeakMap<Element, DevicePixelSize>();
+
+/**
+ * Redraw canvases whenever their CSS size or the screen's pixel density changes.
+ * Where the browser reports device-pixel content boxes, their exact sizes are kept
+ * so each backing pixel maps to one screen pixel. Returns a cleanup function.
+ */
+export function observeCanvasResolution(
+  canvases: readonly (HTMLCanvasElement | null)[],
+  draw: () => void,
+): () => void {
+  const observer = new ResizeObserver((entries) => {
+    for (const entry of entries) {
+      const box = entry.devicePixelContentBoxSize?.[0];
+      if (box) devicePixelSizes.set(entry.target, { width: box.inlineSize, height: box.blockSize });
+    }
+    draw();
+  });
+  for (const canvas of canvases) {
+    if (!canvas) continue;
+    try {
+      observer.observe(canvas, { box: 'device-pixel-content-box' });
+    } catch {
+      // Safari has no device-pixel boxes; CSS sizes and the DPR still apply.
+      observer.observe(canvas);
+    }
+  }
+  // Moving a window between screens changes the DPR without resizing the CSS box.
+  let density: MediaQueryList | undefined;
+  const onDensityChange = () => {
+    watchDensity();
+    draw();
+  };
+  const watchDensity = () => {
+    density?.removeEventListener('change', onDensityChange);
+    density = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+    density.addEventListener('change', onDensityChange);
+  };
+  watchDensity();
+  return () => {
+    observer.disconnect();
+    density?.removeEventListener('change', onDensityChange);
   };
 }
 
@@ -154,17 +222,25 @@ function prepare(canvas: HTMLCanvasElement, options: LabCanvasOptions) {
   const bounds = canvas.getBoundingClientRect();
   const explicitSize = options.width !== undefined || options.height !== undefined;
   const hasLayout = bounds.width > 0 && bounds.height > 0;
+  const onScreen = !explicitSize && hasLayout;
+  const dpr = options.dpr ?? (onScreen ? canvas.ownerDocument.defaultView?.devicePixelRatio || 1 : 1);
+  // Trust the observed device-pixel size only while it agrees with the current
+  // layout; after a resize the observer reports the new size and redraws.
+  const reported = onScreen ? devicePixelSizes.get(canvas) : undefined;
+  const devicePixels = reported && Math.abs(reported.width - bounds.width * dpr) <= 1 &&
+    Math.abs(reported.height - bounds.height * dpr) <= 1 ? reported : undefined;
   const viewport = labViewport(
     options.width ?? (hasLayout ? bounds.width : canvas.width),
     options.height ?? (hasLayout ? bounds.height : canvas.height),
-    options.dpr ?? (explicitSize || !hasLayout ? 1 : canvas.ownerDocument.defaultView?.devicePixelRatio || 1),
+    dpr,
+    devicePixels,
   );
   if (canvas.width !== viewport.pixelWidth) canvas.width = viewport.pixelWidth;
   if (canvas.height !== viewport.pixelHeight) canvas.height = viewport.pixelHeight;
   canvas.parentElement?.style.setProperty('--field-side', `${viewport.side}px`);
   const ctx = canvas.getContext('2d');
   if (!ctx) return null;
-  ctx.setTransform(viewport.dpr, 0, 0, viewport.dpr, 0, 0);
+  ctx.setTransform(viewport.scaleX, 0, 0, viewport.scaleY, 0, 0);
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = 'source-over';
   ctx.fillStyle = FIELD;
@@ -212,7 +288,7 @@ export function drawLocalizationCloud(
   validateView(view);
   const viewport = prepare(canvas, options);
   if (!viewport) return;
-  const { ctx, side, left, top } = viewport;
+  const { ctx, side, left, top, scaleX, scaleY } = viewport;
   const scale = side / view.sizeNm;
   ctx.save();
   ctx.beginPath();
@@ -246,7 +322,9 @@ export function drawLocalizationCloud(
   if (sprite) {
     ctx.globalCompositeOperation = 'lighter';
     ctx.imageSmoothingEnabled = true;
-    const radius = Math.max(1.5, (side / 64) * (truth ? 0.3 : 0.28));
+    // Markers are a fixed fraction of the field on every screen; the floor keeps
+    // them visible in device pixels without enlarging them on dense displays.
+    const radius = Math.max(1.5 / Math.min(scaleX, scaleY), (side / 64) * (truth ? 0.3 : 0.28));
     for (const point of positions) {
       if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) continue;
       const x = left + (point.x - view.x0) * scale;
@@ -293,7 +371,19 @@ export function drawCameraPreview(
   }
   const viewport = prepare(canvas, options);
   if (!viewport) return;
-  const { ctx, side, left, top } = viewport;
+  const { ctx, side, left, top, scaleX, scaleY } = viewport;
+  // Put the image's outer edges on whole device pixels, so nearest-neighbour
+  // camera pixels are not softened at the borders or shifted by a fraction.
+  const drawSnapped = (
+    source: CanvasImageSource, sx: number, sy: number, sw: number, sh: number,
+    x: number, y: number, w: number, h: number,
+  ) => {
+    const x0 = Math.round(x * scaleX) / scaleX;
+    const y0 = Math.round(y * scaleY) / scaleY;
+    const x1 = Math.round((x + w) * scaleX) / scaleX;
+    const y1 = Math.round((y + h) * scaleY) / scaleY;
+    if (x1 > x0 && y1 > y0) ctx.drawImage(source, sx, sy, sw, sh, x0, y0, x1 - x0, y1 - y0);
+  };
   // Preserve rectangular camera frames' aspect ratio inside the square field.
   const cameraScale = side / Math.max(cameraWidth, cameraHeight);
   const width = cameraWidth * cameraScale;
@@ -321,13 +411,16 @@ export function drawCameraPreview(
     const sourceWidth = Math.min(cameraWidth, crop.x + crop.size) - sourceX;
     const sourceHeight = Math.min(cameraHeight, crop.y + crop.size) - sourceY;
     if (sourceWidth <= 0 || sourceHeight <= 0) return;
-    ctx.drawImage(
+    drawSnapped(
       camera.canvas, sourceX, sourceY, sourceWidth, sourceHeight,
       left + ((sourceX - crop.x) / crop.size) * side,
       top + ((sourceY - crop.y) / crop.size) * side,
       (sourceWidth / crop.size) * side, (sourceHeight / crop.size) * side,
     );
   } else {
-    ctx.drawImage(camera.canvas, left + (side - width) / 2, top + (side - height) / 2, width, height);
+    drawSnapped(
+      camera.canvas, 0, 0, cameraWidth, cameraHeight,
+      left + (side - width) / 2, top + (side - height) / 2, width, height,
+    );
   }
 }
