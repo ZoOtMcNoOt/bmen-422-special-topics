@@ -295,7 +295,7 @@ else:
             precision_eq[3].set_color(THEME.accent_alert)
 
             prec_note = Text(
-                "Collecting 400 photons → ~15 nm precision (10× below diffraction limit!)",
+                "Collecting 400 photons → ~10 nm precision (~25× below diffraction limit!)",
                 font=FONT_SANS, font_size=CAPTION_SIZE, color=THEME.accent_algorithm,
             ).next_to(precision_eq, DOWN, buff=0.15)
 
@@ -875,7 +875,7 @@ else:
                 "Temporal sparsity — sparse blinking isolates single emitters",
                 "Microscope hardware — NA ≥ 1.4 objective, dichroic, sCMOS",
                 "Poisson camera model — shot noise dominates at low photon counts",
-                "Gaussian MLE fitting — σ_loc ≈ σ_PSF/√N → ~15 nm at 400 photons",
+                "Gaussian MLE fitting — σ_loc ∝ σ_PSF/√N; ~10 nm at 400 photons",
                 "Monte Carlo simulator — photon budget is the dominant factor",
                 "3D STORM — cylindrical lens encodes z into PSF ellipticity",
                 "Biological examples — ~250 nm → ~20 nm resolves filaments & clusters",
