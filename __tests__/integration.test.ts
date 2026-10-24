@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { matchFrameLocalizations, summarizeMatches, type MatchTotals } from '@/lib/simulator/analysis';
 import { localizeFrame } from '@/lib/simulator/localization';
 import { renderFrame } from '@/lib/simulator/renderFrame';
-import { thompsonSigmaLoc } from '@/lib/simulator/thompson';
+import { mlePrecisionNm } from '@/lib/simulator/precision';
 import { params } from './fixtures';
 
 describe('camera, localization, and measurement integration', () => {
@@ -27,8 +27,8 @@ describe('camera, localization, and measurement integration', () => {
     expect(metrics.activeEmitterFrames).toBe(200);
     expect(metrics.falsePositiveCount).toBe(0);
     expect(metrics.rmsPerAxisErrorNm).not.toBeNull();
-    const sigma = thompsonSigmaLoc(p.psfSigmaNm, p.photonsPerCycle, p.pixelSizeNm, p.backgroundPerPixel);
-    // Both quantities are per-axis; TLW remains an approximation rather than an exact bound.
+    const sigma = mlePrecisionNm(p.psfSigmaNm, p.photonsPerCycle, p.pixelSizeNm, p.backgroundPerPixel);
+    // Both quantities are per-axis; the rigorous fitter should sit at the MLE limit.
     const ratio = metrics.rmsPerAxisErrorNm! / sigma;
     expect(ratio).toBeGreaterThan(0.8);
     expect(ratio).toBeLessThan(1.3);

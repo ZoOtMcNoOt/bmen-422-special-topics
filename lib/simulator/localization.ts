@@ -1,5 +1,5 @@
 import type { Frame, Localization, SimulationParams } from './types';
-import { thompsonSigmaLoc } from './thompson';
+import { mlePrecisionNm } from './precision';
 import { gaussianPsfPixelIntegrated, gaussianPsfPixelIntegratedGradient, gaussianPsfPoint } from './psf';
 
 /** Local-maximum search skips this many pixels at the frame border. */
@@ -218,7 +218,7 @@ export function localizeFrame(frame: Frame, params: SimulationParams): Localizat
       photons = total / fraction;
     }
 
-    const sigmaLocNm = thompsonSigmaLoc(sigma, photons, a, b);
+    const sigmaLocNm = mlePrecisionNm(sigma, photons, a, b);
     if (!valid || !insideRoi(x0, y0) || !Number.isFinite(photons) || photons <= 0 || !Number.isFinite(sigmaLocNm)) continue;
     let deviance = 0;
     for (const { x, y, count } of roi) {

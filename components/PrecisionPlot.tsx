@@ -15,7 +15,7 @@ import {
 } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
 import { MAX_PHOTONS_PER_CYCLE } from '@/lib/simulator/defaults';
-import { thompsonSigmaLoc } from '@/lib/simulator/thompson';
+import { mlePrecisionNm } from '@/lib/simulator/precision';
 import type { SimulationParams, SimulationResult } from '@/lib/simulator/types';
 
 // Register only the ECharts modules used.
@@ -53,7 +53,7 @@ const C = {
   floor: '#8b829c',
 };
 
-export function ThompsonPlot({ params, result }: Props) {
+export function PrecisionPlot({ params, result }: Props) {
   const divRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<echarts.EChartsType | null>(null);
 
@@ -70,7 +70,7 @@ export function ThompsonPlot({ params, result }: Props) {
           ((Math.log10(N_MAX) - Math.log10(N_MIN)) * i) / CURVE_STEPS);
       theory.push([
         N,
-        thompsonSigmaLoc(psfSigmaNm, N, pixelSizeNm, backgroundPerPixel),
+        mlePrecisionNm(psfSigmaNm, N, pixelSizeNm, backgroundPerPixel),
       ]);
       floor.push([N, psfSigmaNm / Math.sqrt(N)]);
     }
@@ -94,7 +94,7 @@ export function ThompsonPlot({ params, result }: Props) {
     const chart = chartRef.current;
     if (!chart) return;
 
-    const predicted = thompsonSigmaLoc(
+    const predicted = mlePrecisionNm(
       psfSigmaNm,
       photonsPerCycle,
       pixelSizeNm,
@@ -114,7 +114,7 @@ export function ThompsonPlot({ params, result }: Props) {
     if (result && runN) {
       points.push(
         {
-          name: 'Thompson estimate at fitted photons',
+          name: 'Limit at fitted photons',
           type: 'scatter',
           symbol: 'diamond',
           symbolSize: 13,
@@ -256,12 +256,12 @@ export function ThompsonPlot({ params, result }: Props) {
       <div ref={divRef} className="h-72 w-full" />
       <dl className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-3">
         <Term color={C.theory} name="Theory">
-          Approximate per-axis precision for an isolated emitter. The dashed
-          line omits pixelation and background.
+          Best per-axis precision a maximum-likelihood fit can reach for an
+          isolated emitter. The dashed line omits pixelation and background.
         </Term>
-        <Term color={C.fitter} name="Thompson estimate at fitted photons">
-          The same approximation using fitted photon counts. Overlap can make it
-          optimistic.
+        <Term color={C.fitter} name="Limit at fitted photons">
+          The same limit using fitted photon counts. Overlap can make it
+          optimistic, and centroid fitting does not reach it.
         </Term>
         <Term color={C.measured} name="Matched RMS error">
           RMS error per axis for matched active emitters. Unmatched detections

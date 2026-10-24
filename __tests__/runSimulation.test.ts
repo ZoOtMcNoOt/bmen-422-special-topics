@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { generateGroundTruth } from '@/lib/simulator/groundTruth';
 import { runSimulation, type LiveUpdate } from '@/lib/simulator/runSimulation';
-import { thompsonSigmaLoc } from '@/lib/simulator/thompson';
+import { mlePrecisionNm } from '@/lib/simulator/precision';
 import * as blinking from '@/lib/simulator/photoswitching';
 import * as fitting from '@/lib/simulator/localization';
 import * as camera from '@/lib/simulator/renderFrame';
@@ -68,7 +68,7 @@ describe('runSimulation', () => {
   it('reports matched localization error and accounts for every fit and active emitter-frame', async () => {
     const r = await runSimulation(gt, p, { rng: seeded(12) });
     expect(r.localizations.length).toBeGreaterThan(100);
-    const predicted = thompsonSigmaLoc(p.psfSigmaNm, p.photonsPerCycle, p.pixelSizeNm, p.backgroundPerPixel);
+    const predicted = mlePrecisionNm(p.psfSigmaNm, p.photonsPerCycle, p.pixelSizeNm, p.backgroundPerPixel);
     expect(r.apparentSigmaLocNm).not.toBeNull();
     expect(r.apparentSigmaLocNm! / predicted).toBeGreaterThan(0.75);
     expect(r.apparentSigmaLocNm! / predicted).toBeLessThan(1.35);

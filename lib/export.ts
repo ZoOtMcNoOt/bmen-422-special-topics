@@ -9,7 +9,7 @@ export function localizationCsv(result: SimulationResult, seed?: number): string
     'raw_y_nm',
     'corrected_x_nm',
     'corrected_y_nm',
-    'thompson_sigma_nm',
+    'mle_precision_limit_nm',
     'photons',
     'photon_yield_per_active_frame',
     'background_mean_per_pixel',

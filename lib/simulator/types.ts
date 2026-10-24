@@ -52,7 +52,7 @@ export type Frame = {
 export type Localization = {
   x: number;          // nm
   y: number;          // nm
-  sigmaLocNm: number; // Thompson estimate from this loc's photon count
+  sigmaLocNm: number; // MLE precision limit (Mortensen 2010) at this loc's photon count
   nPhotons: number;
   frameIndex: number;
 };
@@ -115,9 +115,9 @@ export type SimulationResult = {
   localizations: Localization[];
   /** Unmodified accepted fits in camera coordinates, in the same order as localizations. */
   rawLocalizations: Localization[];
-  /** Median of each loc's own Thompson estimate. Optimistic when molecules
+  /** Median of each loc's own MLE precision limit. Optimistic when molecules
    *  overlap, because the fitter attributes the merged photon count to one
-   *  molecule. */
+   *  molecule, and in centroid mode, which does not reach the limit. */
   apparentSigmaLocNm: number | null;
   metrics: LocalizationMetrics;
 };

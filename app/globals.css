@@ -25,7 +25,7 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  /* The STORM accent — mirrored as C.theory in ThompsonPlot for ECharts. */
+  /* The STORM accent — mirrored as C.theory in PrecisionPlot for ECharts. */
   --color-storm: #7756d8;
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);

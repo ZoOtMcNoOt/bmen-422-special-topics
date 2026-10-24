@@ -5,6 +5,7 @@ import { Download, Pause, Play } from 'lucide-react';
 import {
   drawCameraPreview,
   drawLocalizationCloud,
+  observeCanvasResolution,
 } from '@/lib/rendering/labCanvas';
 import { pickScaleBar } from '@/lib/rendering/scaleBar';
 import { computeDriftAtFrame } from '@/lib/simulator/drift';
@@ -142,10 +143,7 @@ export function ObservationPanel({
 
   useEffect(() => {
     draw();
-    const observer = new ResizeObserver(draw);
-    for (const ref of [cloud, camera])
-      if (ref.current) observer.observe(ref.current);
-    return () => observer.disconnect();
+    return observeCanvasResolution([cloud.current, camera.current], draw);
   }, [draw]);
 
   const setFrame = (frame: number | null) => {
